@@ -10,6 +10,8 @@ sys.path.insert(0, parent_dir)
 
 from bye_splits.plot.display_plotly import yaml, np, pd, go, dcc
 
+import h5py
+import json
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -21,6 +23,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
+from shapely import geometry as geom
+from shapely.geometry import Polygon, mapping, shape
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -62,13 +66,13 @@ def plot_grid(df_grid, df_bin, kw):
         ))
 
     # Plot center_X and center_Y from df_bin
-    fig.add_trace(go.Scatter(
+    '''fig.add_trace(go.Scatter(
         x=df_bin['centroid_X'],
         y=df_bin['centroid_Y'],
         mode='markers',
         marker=dict(color='black', size=1),
         name='Center Points'
-    ))    
+    )) '''   
 
     #for vertices_X, vertices_Y in zip(df_bin['bin_vertex_X'], df_bin['bin_vertex_Y']):
     #    vertices_X = np.array(vertices_X)
@@ -107,118 +111,52 @@ def plot_grid(df_grid, df_bin, kw):
     
     return fig
 
-
-def plot_single_event(grid_params, hexagon_data, df_bin, output_path):
-    
-    sample_df = processingMS.Processing().create_grid_df(grid_params)
-    test_fig = plot_grid(sample_df, df_bin, grid_params)
-
-    grouped_data = hexagon_data.groupby('ts_layer')
-
-    # Iterate through the groups
-    for ts_layer_value, group in grouped_data:
-        # Iterate through the rows of the group
-        for index, row in group.iterrows():
-            hex_x = row['hex_x']
-            hex_y = row['hex_y']
-
-            # Close the hexagon by repeating the first vertex at the end
-            hex_x.append(hex_x[0])
-            hex_y.append(hex_y[0])
-
-            # Add the hexagon trace to the existing Plotly figure
-            #test_fig.add_trace(px.line(x=hex_x, y=hex_y, line_shape='linear').data[0])
-              # Add the hexagon trace to the existing Plotly figure
-            test_fig.add_trace(go.Scatter(
-                x=hex_x,
-                y=hex_y,
-                mode='lines',
-                #fill='toself',
-                #fillcolor='red'
-                #line=dict(color='red'),
-                #marker=dict(size=12, color=row['ts_mipPt'], colorscale='Viridis', colorbar=dict(title='mipPt'))
-                #marker=dict(size=12,color=[row['ts_mipPt']] * len(hex_x),colorscale='Viridis', colorbar=dict(title='mipPt'))
-            ))
-    test_fig.write_image(output_path)
-    return test_fig 
-
-def plot_single_event_proj(grid_params, hexagon_proj, df_bin, output_path2):
+def plot_byesplit_geom(grid_params, hexagon_proj, df_bin, output_path2):
     grid_df = processingMS.Processing().create_grid_df(grid_params)
     test_fig = plot_grid(grid_df, df_bin, grid_params)
 
+    df_bye_sci = pd.read_hdf("/data_CMS/cms/manoni/L1HGCAL/byesplit_geom/geom_bye.hdf5")   
+    print("Columns:")
+    print(df_bye_sci.columns)   
+    
     # Iterate through the rows of aggregated_df
-    for index, row in hexagon_proj.iterrows():
-        hex_x = row['hex_x']
-        hex_y = row['hex_y']
-        mip_pt = row['ts_mipPt']
-        ts_wu = row['ts_wu']
-        ts_wv = row['ts_wv']
-        #print("mippt", mip_pt)
+    for index, row in df_bye_sci.iterrows():
+        #if row['layer'] <= 28:
+        if row['layer'] > 28 and row['layer'] % 2 == 0:    
 
-        # Define fill color based on mip_pt value
-        fill_color = 'rgba(0,0,255,0.2)'  # Default fill color
-        '''if mip_pt is not None:
-            # Adjust the fill color based on the mip_pt value
-            fill_color = f'rgba(0,0,255,{mip_pt/max(hexagon_proj["ts_mipPt"])})'
-            print("mippt MAX", max(hexagon_proj["ts_mipPt"]))
-            print("mippt", fill_color)'''
-        
-        if mip_pt is not None and mip_pt / max(hexagon_proj["ts_mipPt"]) > 0.0001:
-            # Adjust the fill color based on the mip_pt value
-            max_mip_pt = max(hexagon_proj["ts_mipPt"])
-            alpha = mip_pt / max_mip_pt
-            fill_color = f'rgba(0, 0, 255, {alpha})'
-            #print("mippt MAX:", max_mip_pt)
-            #print("mippt:", fill_color)
-        else:
-            fill_color = 'rgba(0, 0, 255, 0)'
+            hex_x = row['hex_x']
+            hex_y = row['hex_y']
+            #print("mippt", mip_pt)
 
-        hex_x_closed = hex_x + (hex_x[0],)
-        hex_y_closed = hex_y + (hex_y[0],)
-
-        # Add the hexagon trace to the existing Plotly figure
-        test_fig.add_trace(go.Scatter(
-            x=hex_x_closed,
-            y=hex_y_closed,
-            mode='lines',
-            line=dict(color='red'),  # Adjust the color as needed
-            fill='toself',
-            fillcolor=fill_color,
-            marker=dict(size=12, color=mip_pt, colorscale='Viridis', colorbar=dict(title='mipPt')),
-            hoverinfo='text',
-            text=f'mipPt: {mip_pt}'
-        ))
-
-        # Add the hexagon trace to the existing Plotly figure
-        test_fig.add_trace(go.Scatter(
-            x=hexagon_proj['ts_x'],
-            y=hexagon_proj['ts_y'],
-            mode='markers',
-            marker=dict(color='red', size=4),  # Adjust the color as needed
-            name=f'hex_centroid'
-        ))
-
-        test_fig.add_trace(go.Scatter(
-            x=hexagon_proj['ts_x'],
-            y=hexagon_proj['ts_y'],
-            mode='text',
-            text=[f'{wu}, {wv}' for wu, wv in zip(hexagon_proj['ts_wu'], hexagon_proj['ts_wv'])],
-            textposition='middle center',  # Set the position of the text to the middle of each point
-            textfont=dict(size=7, color='black'),  # Adjust the font size and color as needed
-        ))
-
-        '''for tsx, tsy, wu, wv in zip(hexagon_proj['ts_x'], hexagon_proj['ts_y'], hexagon_proj['ts_wu'], hexagon_proj['ts_wv']):
-            test_fig.add_annotation(
-                x=tsx,
-                y=tsy,
-                text=f'{wu}, {wv}',
-                showarrow=False,
-                font=dict(size=10, color='black'),  # Adjust the font size and color as needed
-                xshift=0,  # Adjust the x-shift if needed
-                yshift=0   # Adjust the y-shift if needed
-            )'''
-
-
+            hex_x_closed = hex_x + [hex_x[0]]
+            hex_y_closed = hex_y + [hex_y[0]]   
+            print("arrivato qui 0")
+            # Add the hexagon trace to the existing Plotly figure
+            test_fig.add_trace(go.Scatter(
+                x=hex_x_closed,
+                y=hex_y_closed,
+                mode='lines',
+                line=dict(color='red')
+            ))
+            print("arrivato qui")
+            # Add the hexagon trace to the existing Plotly figure
+            test_fig.add_trace(go.Scatter(
+                x=df_bye_sci['wx_center'],
+                y=df_bye_sci['wy_center'],
+                mode='markers',
+                marker=dict(color='red', size=4),  # Adjust the color as needed
+                name=f'hex_centroid'
+            ))
+            print("arrivato qui 2")
+            '''test_fig.add_trace(go.Scatter(
+                x=df_bye_sci['wx_center'],
+                y=df_bye_sci['wx_center'],
+                mode='text',
+                text=[f'U:{wu}, V:{wv}' for wu, wv in zip(df_bye_sci['waferu'], df_bye_sci['waferv'])],
+                textposition='middle center',  # Set the position of the text to the middle of each point
+                textfont=dict(size=7, color='black'),  # Adjust the font size and color as needed
+            ))'''
+            print("arrivato qui 3")
     test_fig.write_image(output_path2, width=2400, height=1600)
     return test_fig
 
@@ -255,63 +193,6 @@ def plot_hexagon_with_bins(hexagon_coords, bin_coords, save_path='hexagon_with_b
     # Save as PNG file
     fig.write_image(save_path)
     print(f"Plot saved as {save_path}")
-
-
-def plot_grid_area_overlap(merged_df, algo, subdet, event, particle):
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    # Dictionary to store cumulative mipPt values for each bin
-    cumulative_mipPt = {}
-
-    for index, row in merged_df.iterrows():
-        for bin_info in row['bins_overlapping']:
-            eta_vertices = tuple(bin_info['eta_vertices'])
-            phi_vertices = tuple(bin_info['phi_vertices'])
-            ts_mipPt = bin_info['mipPt']
-
-            # Update cumulative mipPt for the bin
-            bin_key = (eta_vertices, phi_vertices)   #here change key?
-            if bin_key not in cumulative_mipPt:
-                cumulative_mipPt[bin_key] = 0
-            cumulative_mipPt[bin_key] += ts_mipPt
-            '''if cumulative_mipPt[bin_key] !=0:
-                print("bin key", bin_key)    
-                print("here", cumulative_mipPt[bin_key])'''
-
-    # Normalize cumulative mipPt values for color mapping
-    max_cumulative_mipPt = max(cumulative_mipPt.values())
-    norm = Normalize(vmin=0, vmax=max_cumulative_mipPt)
-
-    # Plot bins with cumulative mipPt values
-    for bin_key, cumulative_mip in cumulative_mipPt.items():
-        eta_vertices, phi_vertices = bin_key
-        poly = Polygon(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')
-        ax.add_patch(poly)
-
-        # Set color for the bin based on cumulative mipPt value
-        color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(cumulative_mip)
-        poly.set_facecolor(color)
-
-        # Add text annotation with cumulative mipPt value
-        text_x = np.mean(eta_vertices)
-        text_y = np.mean(phi_vertices)
-        ax.text(text_x, text_y, f'{cumulative_mip:.1f}', color='black', ha='center', va='center', fontsize=5)
-
-    # Add color bar
-    cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
-    sm = ScalarMappable(norm=norm, cmap='viridis')
-    sm.set_array(list(cumulative_mipPt.values()))
-    cbar = fig.colorbar(sm, cax=cax)
-    cbar.set_label('mipPt')
-
-    # Set labels and title
-    ax.set_xlabel('Eta')
-    ax.set_ylabel('Phi')
-    ax.set_title(f'{algo}_{subdet}_{particle}_{event}')
-
-    ax.autoscale()
-    plt.savefig(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/{algo}_{subdet}_{particle}_{event}.png', dpi=500)
-
 
 def plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_number):
     '''function to plot the centers of module sums for byesplit geometry 
@@ -452,3 +333,247 @@ def plot_layers_sci(df_tc, sci_geom):
         ax.legend()
         plt.savefig(f"sci_plot_of_layer_{layer}.png", dpi=600)
         plt.close()
+
+
+def plot_baseline(df_baseline_proj, algo, event, particle):
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Dictionary to store total mipPt values for each bin
+    total_mipPt = {}
+
+    for index, row in df_baseline_proj.iterrows():
+        eta_vertices = row['eta_vertices']
+        phi_vertices = row['phi_vertices']
+        mipPt = row['mipPt']
+
+        # Store total mipPt for the bin
+        bin_key = (eta_vertices, phi_vertices)
+        total_mipPt[bin_key] = mipPt
+
+    # Normalize total mipPt values for color mapping
+    max_mipPt = max(total_mipPt.values())
+    norm = Normalize(vmin=0, vmax=max_mipPt)
+
+    # Plot bins with total mipPt values
+    for bin_key, mipPt in total_mipPt.items():
+        eta_vertices, phi_vertices = bin_key
+        poly = Polygon(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')
+        ax.add_patch(poly)
+
+        # Set color for the bin based on total mipPt value
+        color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(mipPt)
+        poly.set_facecolor(color)
+
+        # Add text annotation with total mipPt value
+        text_x = np.mean(eta_vertices)
+        text_y = np.mean(phi_vertices)
+        ax.text(text_x, text_y, f'{mipPt:.1f}', color='black', ha='center', va='center', fontsize=5)
+
+    # Add color bar
+    cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
+    sm = ScalarMappable(norm=norm, cmap='viridis')
+    sm.set_array(list(total_mipPt.values()))
+    cbar = fig.colorbar(sm, cax=cax)
+    cbar.set_label('Total mipPt')
+
+    # Set labels and title
+    ax.set_xlabel('Eta')
+    ax.set_ylabel('Phi')
+    ax.set_title(f'{algo}_{particle}_{event}')
+
+    ax.autoscale()
+    plt.savefig(f'{algo}_{particle}_{event}.png', dpi=500)  # Save the plot as an image
+    plt.show()
+
+def plot_towers_eta_phi_grid(df_baseline_proj, algo, event, particle):
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Plotting the grid of bins
+    initial_kw = {
+        'NbinsEta': 20,
+        'NbinsPhi': 72,
+        'MinPhi': -3.14159,
+        'MaxPhi': +3.14159,
+        'EtaMin': 1.305,
+        'EtaMax': 3.045
+    }
+    eta_bins = np.linspace(initial_kw['EtaMin'], initial_kw['EtaMax'], initial_kw['NbinsEta'] + 1)
+    phi_bins = np.linspace(initial_kw['MinPhi'], initial_kw['MaxPhi'], initial_kw['NbinsPhi'] + 1)
+
+    for i in range(len(eta_bins) - 1):
+        for j in range(len(phi_bins) - 1):
+            eta_vertices = [eta_bins[i], eta_bins[i + 1], eta_bins[i + 1], eta_bins[i]]
+            phi_vertices = [phi_bins[j], phi_bins[j], phi_bins[j + 1], phi_bins[j + 1]]
+            poly = Polygon(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')
+            color = ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap='viridis').to_rgba(0)
+            poly.set_facecolor(color)
+            ax.add_patch(poly)
+
+    # Normalize total mipPt values for color mapping
+    max_mipPt = df_baseline_proj['mipPt'].max()
+    norm = Normalize(vmin=0, vmax=max_mipPt)
+
+    # Plotting bins with colors and annotations
+    for _, row in df_baseline_proj.iterrows():
+        eta_vertices = row['eta_vertices']
+        phi_vertices = row['phi_vertices']
+        mipPt = row['mipPt']
+
+        bin_key = (eta_vertices, phi_vertices)
+        color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(mipPt)
+
+        poly = Polygon(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')
+        ax.add_patch(poly)
+        poly.set_facecolor(color)
+
+        text_x = np.mean(eta_vertices)
+        text_y = np.mean(phi_vertices)
+        ax.text(text_x, text_y, f'{mipPt:.1f}', color='black', ha='center', va='center', fontsize=5)
+
+    # Add color bar
+    cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
+    sm = ScalarMappable(norm=norm, cmap='viridis')
+    sm.set_array(df_baseline_proj['mipPt'])
+    cbar = fig.colorbar(sm, cax=cax)
+    cbar.set_label('Total mipPt')
+
+    # Set labels and title
+    ax.set_xlabel('Eta')
+    ax.set_ylabel('Phi')
+    ax.set_title(f'{algo}_{particle}_{event}')
+
+    ax.autoscale()
+    plt.savefig(f'{algo}_{particle}_{event}.png', dpi=500)  # Save the plot as an image
+    plt.show()
+
+
+
+
+def plot_hex_bin_overlap_save(hdf5_filename, output_folder):
+        with h5py.File(hdf5_filename, 'r') as hf:
+            for layer_name in hf.keys():
+                layer_group = hf[layer_name]
+                plt.figure(figsize=(8, 6))
+                plt.title(f'Layer: {layer_name}')
+                
+                for hex_key in layer_group.keys():
+                    hex_group = layer_group[hex_key]
+                    hex_x = hex_group['hex_x'][:]
+                    hex_y = hex_group['hex_y'][:]
+                    
+                    # Repeat the first vertex to close the polygon
+                    hex_x_closed = list(hex_x) + [hex_x[0]]
+                    hex_y_closed = list(hex_y) + [hex_y[0]]
+                    
+                    plt.plot(hex_x_closed, hex_y_closed, color='blue')
+
+                    # Retrieve mippt value from the hexagon's group
+                    mippt = hex_group['ts_mipPt'][()]
+                    
+                    # Retrieve centroid coordinates from the hexagon's group
+                    hex_center_x = hex_group['hex_x_centroid'][()]
+                    hex_center_y = hex_group['hex_y_centroid'][()]
+                    
+                    plt.text(hex_center_x, hex_center_y, f'mipPt: {mippt:.2f}', color='red', ha='center', va='center')
+                    
+                    for bin_key in hex_group.keys():
+                        if bin_key.startswith('bin_'):
+                            bin_group = hex_group[bin_key]
+                            x_vertices = bin_group['x_vertices'][:]
+                            y_vertices = bin_group['y_vertices'][:]
+
+                            # Calculate area overlap percentage
+                            area_overlap_percentage = bin_group['percentage_overlap'][()]
+                            
+                            plt.fill(x_vertices, y_vertices, color='orange', alpha=0.5)
+
+                            # Plot area overlap percentage near the bin
+                            bin_center_x = np.mean(x_vertices)
+                            bin_center_y = np.mean(y_vertices)
+                            #plt.text(bin_center_x, bin_center_y, f'{area_overlap_percentage:.2f}', color='black', ha='center', va='center')
+                
+                plt.xlabel('X')
+                plt.ylabel('Y')
+                plt.gca().set_aspect('equal', adjustable='box')
+                plt.grid(True)
+                
+                output_filename = os.path.join(output_folder, f'{layer_name}_overlap_2.png')
+                plt.savefig(output_filename)
+                plt.close()    
+
+
+def plot_bins_from_geojson(geojson_file, output_dir):
+        # Read GeoJSON file
+        with open(geojson_file, 'r') as f:
+            data = json.load(f)
+        
+        # Dictionary to store bins grouped by layer
+        layer_bins = {}
+        
+        # Iterate over each feature in the GeoJSON file
+        for feature in data['features']:
+            layer = feature['properties']['Layer']
+            geometry = shape(feature['geometry'])  # Convert GeoJSON geometry to Shapely geometry
+            
+            # Add the geometry to the corresponding layer
+            if layer not in layer_bins:
+                layer_bins[layer] = [geometry]
+            else:
+                layer_bins[layer].append(geometry)
+        
+        # Plot bins for each layer
+        for layer, bins in layer_bins.items():
+            plt.figure(figsize=(8, 6))
+            for bin_geometry in bins:
+                plt.plot(*bin_geometry.exterior.xy, color='blue')
+
+            for i in range(10, 251, 10):  # Start from 10 cm to 250 cm, increment by 10
+                plt.plot([-1, 1], [i, i], color='black', linewidth=0.5)  # Draw ticks between x=-1 and x=1
+
+
+            plt.title(f'Layer {layer} - Bins')
+            plt.xlabel('X Position')
+            plt.ylabel('Y Position')
+            plt.grid(True)
+            
+            # Save the plot as a PNG file
+            output_file = os.path.join(output_dir, f'layer_{layer}_bins_geojson.png')
+            plt.savefig(output_file)
+            plt.close()                       
+
+
+def plot_hexagons_from_geojson(geojson_file, output_dir):
+        # Read GeoJSON file
+        with open(geojson_file, 'r') as f:
+            data = json.load(f)
+        
+        # Dictionary to store hexagons grouped by layer
+        layer_hexagons = {}
+        
+        # Iterate over each feature in the GeoJSON file
+        for feature in data['features']:
+            layer = feature['properties']['Layer']
+            geometry_coords = feature['geometry']['coordinates'][0]  # Extract coordinates
+            polygon = Polygon(geometry_coords)  # Convert to Shapely polygon
+            
+            # Add the polygon to the corresponding layer
+            if layer not in layer_hexagons:
+                layer_hexagons[layer] = [polygon]
+            else:
+                layer_hexagons[layer].append(polygon)
+        
+        # Plot hexagons for each layer
+        for layer, hexagons in layer_hexagons.items():
+            plt.figure(figsize=(8, 6))
+            for hexagon in hexagons:
+                x, y = hexagon.exterior.xy
+                plt.plot(x, y, color='blue')
+            plt.title(f'Layer {layer} - Hexagons')
+            plt.xlabel('X Position')
+            plt.ylabel('Y Position')
+            plt.grid(True)
+            
+            # Save the plot as a PNG file
+            output_file = os.path.join(output_dir, f'layer_{layer}_hexagons_geojson.png')
+            plt.savefig(output_file)
+            plt.close()

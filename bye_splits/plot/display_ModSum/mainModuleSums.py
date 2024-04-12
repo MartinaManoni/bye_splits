@@ -1,4 +1,5 @@
 # coding: utf-8
+# python mainModuleSums.py --subdet all_subdet --event -1 --algo 8towers --particle photons
 
 _all_ = [ ]
 
@@ -19,107 +20,116 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 
-from bye_splits.utils import parsing, common
 import plotMS
 import processingMS
 
-#20x 24 eta-phi bin for 120 degrees, so for the entire module is 20x72 (360 degrees)
-initial_kw = {
-    'NbinsEta': 20,
-    'NbinsPhi': 72,
-    'MinPhi': -3.14159,
-    'MaxPhi': +3.14159,
-    'EtaMin': 1.5,
-    'EtaMax': 3
-}
 
-initial_df_grid = processingMS.Processing().create_grid_df(initial_kw)
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Interactive Grid Comparison")
 
-app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
+    parser.add_argument("--subdet", default='all_subdet', help="Select subdetector (CEE, CEH, CEH_even, CEH_odd, or all_subdet)") #FIXME
+    parser.add_argument("--event", default='5492', help="Select event number or -1 for all events")
+    parser.add_argument("--algo", default='8towers', help="Select algorithm (baseline, area_overlap, 8towers)")
+    parser.add_argument("--particle", default='photons', help="Select particle type (photons or pions)")
 
-app.layout = html.Div([
-    html.H1("Interactive Grid Comparison"),
-    
-    dcc.Graph(id='grid-plot'),
+    return parser.parse_args()
 
-    html.Label("Adjust Binning Parameters:"),
-    
-    dcc.Slider(
-        id='phi-slider',
-        min=10,
-        max=50,
-        step=1,
-        marks={i: str(i) for i in [10, 20, 30, 40]},
-        value=initial_kw['NbinsPhi'],
-        tooltip={'placement': 'bottom'},
-        updatemode='mouseup'
-    ),
 
-    dcc.Slider(
-        id='eta-slider',
-        min=5,
-        max=20,
-        step=1,
-        marks={i: str(i) for i in [5, 10, 20]},
-        value=initial_kw['NbinsEta'],
-        tooltip={'placement': 'bottom'},
-        updatemode='mouseup'
-    )
-])
-
-@app.callback(
-    Output('grid-plot', 'figure'),
-    [Input('phi-slider', 'value'),
-     Input('eta-slider', 'value')]
-)
-def update_plot(n_phi, n_eta):
-    kw = {
-        'NbinsEta': n_eta,
-        'NbinsPhi': n_phi,
-        'MinPhi': -3.14159,
-        'MaxPhi': +3.14159,
-        'EtaMin': 1.5,
-        'EtaMax': 3
-    }
-
-    #df_grid = plotMS.create_grid_df(kw)
-
-    app.config.suppress_callback_exceptions = True
-    
-    print("interactive plotting")
-    fig= plotMS.plot_single_event_proj(initial_kw, data, df_bin, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/grid_eta_1.5_3_20x72{algo}_{subdet}_{particle}_{event}.png', dpi=500)
-    return fig
-
-if __name__ == '__main__':
-    #args = parsing.parser_display_plotly()
+def main(subdet, event, particle, algo):
     process = processingMS.Processing() 
 
-    subdet = 'all_subdet'  # select between CEE, CEH_even, CEH_odd or all_subdet
-    event= '3737' # select between 'event number' or '-1'(all events)
-    algo='baseline' # select between baseline, area_overlap, algo3
-    particle= 'pions' #select between photons or pions
-
-    #n.b: algo3 for all_subdet not working properly at the moment 
-
-    # Method that retrieves a single event or all events and process the data with the geometry
+    # Method that retrieves events and process the data with the geometry
     data = process.get_data_new(event) 
     print("Dataframe columns",data.columns)
+
+    bin_geojson_filename = '/geojson/towers_bins.geojson'
+    hex_geojson_filename = '/geojson/hexagons_byesplit.geojson'
+    hdf5_filename = f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/hdf5_files/overlap_data_final_{particle}_{event}.h5'
+
+    initial_kw = {
+        'NbinsEta': 20,
+        'NbinsPhi': 72,
+        'MinPhi': -3.14159,
+        'MaxPhi': +3.14159,
+        'EtaMin': 1.305,
+        'EtaMax': 3.045
+    }
+
+    #towers_bins = process.create_bin_df_new(initial_kw)
+    process.ModSumToTowers(initial_kw, data , subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename)
+
+    #process.save_bin_geo(towers_bins, output_file)
+    #process.save_bin_hex(output_file_hex)
+
+    #process.plot_bins_with_eta_phi_for_phi_90(input_file, output_dir)
+
+
+    #Dash app 
+    #FIXME --> needs to be updated, layer by layer plotting
+    '''
+    initial_df_grid = processingMS.Processing().create_grid_df(initial_kw)
+
+    app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
+
+    app.layout = html.Div([
+        html.H1("Interactive Grid Comparison"),
+        
+        dcc.Graph(id='grid-plot'),
+
+        html.Label("Adjust Binning Parameters:"),
+        
+        dcc.Slider(
+            id='phi-slider',
+            min=10,
+            max=50,
+            step=1,
+            marks={i: str(i) for i in [10, 20, 30, 40]},
+            value=initial_kw['NbinsPhi'],
+            tooltip={'placement': 'bottom'},
+            updatemode='mouseup'
+        ),
+
+        dcc.Slider(
+            id='eta-slider',
+            min=5,
+            max=20,
+            step=1,
+            marks={i: str(i) for i in [5, 10, 20]},
+            value=initial_kw['NbinsEta'],
+            tooltip={'placement': 'bottom'},
+            updatemode='mouseup'
+        )
+    ])
+
+    @app.callback(
+        Output('grid-plot', 'figure'),
+        [Input('phi-slider', 'value'),
+        Input('eta-slider', 'value')]
+    )
     
-    if subdet != 'all_subdet':
-        mask = data['group'] == subdet
-        data = data[mask]
+    def update_plot(n_phi, n_eta):
+        kw = {
+            'NbinsEta': n_eta,
+            'NbinsPhi': n_phi,
+            'MinPhi': -3.14159,
+            'MaxPhi': +3.14159,
+            'EtaMin': 1.5,
+            'EtaMax': 3
+        }
 
-    data.rename(columns={'wx_center': 'ts_x', 'wy_center': 'ts_y'}, inplace=True) #only because now I am using byesplit geometry
-    #print(f"Dataframe {subdet}", data[mask])
+        print("interactive plotting")
+        fig= plotMS.plot_single_event_proj(initial_kw, data, df_bin, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/grid_eta_1.5_3_20x72{algo}_{subdet}_{particle}_{event}.png', dpi=500)
+        return fig'''
 
-    # Method that creates the x/y grid form eta/phi bins - used only for graphical reasons, cause here the bins are rectangular polygons (no arcs)
-    df_bin = process.create_bin_df(initial_kw)
-    #print("Bin dataframe", df_bin.columns)
+        #df_grid = plotMS.create_grid_df(kw)
 
-    # Modules To Towers algorithms 
-    process.ModSumToTowers(initial_kw, data, df_bin, algo, subdet, event, particle)  #poi inserire il subdet qui dentro 
+    #app.config.suppress_callback_exceptions = True
+    #app.run_server(debug=True, port=8051, host="0.0.0.0")
 
-    #plotMS.plot_single_event_proj(initial_kw, data, df_bin, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/grid_eta_1.5_3_20x72{algo}_{subdet}_{particle}_{event}.png')
 
-    #app.run_server(debug=True, port=8051,host="0.0.0.0")
+if __name__ == '__main__':
+    args = parse_arguments()
+    main(args.subdet, args.event, args.particle, args.algo)
+
+    
 
