@@ -524,54 +524,57 @@ class Processing():
 
     #ALGORITHMS
 
-    def baseline(self,df_hexagon_info):
+    def baseline(self, df_hexagon_info):
         print("Baseline algorithm ...")
+        start_time = time.time()
         
         # Initialize a dictionary to store the summed mipPt for each bin by layer
         bin_mipPt_by_layer = {}
 
+        # Convert DataFrame to numpy array for faster computation
+        hexagon_info_array = df_hexagon_info.to_numpy()
+
+        # Get unique layer indices
+        unique_layers = np.unique(hexagon_info_array[:, 0])
+
         # Iterate over each layer
-        for layer_idx, layer_df in df_hexagon_info.groupby('layer'):
-            #print("---------layer idx", layer_idx)
+        for layer_idx in unique_layers:
+            layer_df = hexagon_info_array[hexagon_info_array[:, 0] == layer_idx]
 
             bin_mipPt = {}  # Initialize mipPt for bins in the current layer
 
             # Iterate over each hexagon in the layer
-            for hex_row in layer_df.itertuples():
-                #print("------hex")
-                if not hex_row.bins_overlapping:
-                    continue  # Skip hexagons with no overlapping bins
+            for hex_row in layer_df:
+                if not hex_row[8]:  # Skip hexagons with no overlapping bins
+                    continue
 
                 # Prepare array of hexagon eta/phi centroids
-                hex_centroid = np.array([hex_row.hex_eta_centroid, hex_row.hex_phi_centroid])
+                hex_centroid = np.array([hex_row[5], hex_row[6]])
 
                 # Prepare array of bin eta/phi centroids and mipPt
                 bin_centroids = []
                 bin_mipPts = []
 
-                for bin_info in hex_row.bins_overlapping:
-                    #print("bin")
+                for bin_info in hex_row[8]:
                     bin_eta_centroid = bin_info['centroid_eta']
+                    #print("bin_eta_centroid",bin_eta_centroid)
                     bin_phi_centroid = bin_info['centroid_phi']
                     bin_centroid = np.array([bin_eta_centroid, bin_phi_centroid])
                     bin_centroids.append(bin_centroid)
 
                     # Directly use the mipPt of the hexagon for the nearest bin
-                    bin_mipPts.append(hex_row.ts_mipPt)
-
-                    #print("hex_row.ts_mipPt", hex_row.ts_mipPt)
+                    bin_mipPts.append(hex_row[7])
 
                 bin_centroids = np.array(bin_centroids)
 
                 # Compute pairwise distances between hexagon and bins
-                distances = cdist([hex_centroid], bin_centroids)
-                #print("distance", distances)
+                distances = np.linalg.norm(bin_centroids - hex_centroid, axis=1)
+
                 # Find the nearest bin for the current hexagon
                 nearest_bin_idx = np.argmin(distances)
-                #print("BIN IDX", nearest_bin_idx)
 
                 # Assign mipPt of hexagons to the nearest bins
-                nearest_bin_info = hex_row.bins_overlapping[nearest_bin_idx]
+                nearest_bin_info = hex_row[8][nearest_bin_idx]
                 bin_key = (tuple(nearest_bin_info['eta_vertices']), tuple(nearest_bin_info['phi_vertices']))
 
                 if bin_key not in bin_mipPt:
@@ -581,7 +584,7 @@ class Processing():
 
             bin_mipPt_by_layer[layer_idx] = bin_mipPt
 
-        # Convert the bin_mipPt_by_layer dictionary into a DataFrame
+        # Convert the bin_mipPt_by_layer dictionary into a list of dictionaries
         rows = []
 
         for layer_idx, mipPt_dict in bin_mipPt_by_layer.items():
@@ -594,17 +597,20 @@ class Processing():
                 }
                 rows.append(row)
 
-        df_baseline_layer = pd.DataFrame(rows)
+        end_time = time.time()
+        print("Execution time loop - baseline", end_time-start_time)
 
-        df_baseline = df_baseline_layer.groupby(['eta_vertices', 'phi_vertices']).agg({'mipPt': 'sum'}).reset_index()
+        # Convert the list of dictionaries to a numpy array
+        df_baseline = np.array([(row['layer'], row['eta_vertices'], row['phi_vertices'], row['mipPt']) for row in rows],
+                            dtype=[('layer', int), ('eta_vertices', object), ('phi_vertices', object), ('mipPt', float)])
 
-        print("df_baseline PROJ columns", df_baseline.columns)
-        print("df_baseline PROJ", df_baseline)
+        df_baseline = pd.DataFrame(df_baseline, columns=['layer', 'eta_vertices', 'phi_vertices', 'mipPt'])
+        df_baseline = df_baseline.groupby(['eta_vertices', 'phi_vertices']).agg({'mipPt': 'sum'}).reset_index()
 
-        #plotMS.plot_baseline(df_baseline, 'baseline', '-1', 'photons')
-
+        print("df_baseline", df_baseline)
         return df_baseline
     
+
     def area_overlap(self, df_overlap): 
         print("Area overlap algorithm ...")
         # Group DataFrame by 'layer' column
@@ -930,12 +936,12 @@ class Processing():
     def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename):    
         print('Mod sum to towers') 
 
-        plotMS.plot_bins_from_geojson(bin_geojson_filename, 'plot_layers')
-        plotMS.plot_hexagons_from_geojson(hex_geojson_filename, 'plot_layers')
+        #plotMS.plot_bins_from_geojson(bin_geojson_filename, 'plot_layers')
+        #plotMS.plot_hexagons_from_geojson(hex_geojson_filename, 'plot_layers')
 
         #overlap = self.eval_hex_bin_overlap(data, bin_geojson_filename, f'overlap_data_final_{particle}_{event}.h5')
         
-        plotMS.plot_hex_bin_overlap_save(hdf5_filename, '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/plot_layers/plot_overlap/')
+        #plotMS.plot_hex_bin_overlap_save(hdf5_filename, '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/plot_layers/plot_overlap/')
 
         overlap_data = self.read_hdf5_file(hdf5_filename)
 
