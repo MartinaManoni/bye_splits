@@ -20,7 +20,7 @@ import plotly.io as pio
 from scipy.spatial.distance import cdist
 
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
+from matplotlib.patches import Polygon as PolygonPlt
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
 from shapely import geometry as geom
@@ -357,7 +357,7 @@ def plot_baseline(df_baseline_proj, algo, event, particle):
     # Plot bins with total mipPt values
     for bin_key, mipPt in total_mipPt.items():
         eta_vertices, phi_vertices = bin_key
-        poly = Polygon(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')
+        poly = PolygonPlt(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')
         ax.add_patch(poly)
 
         # Set color for the bin based on total mipPt value
@@ -404,7 +404,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, algo, event, particle):
         for j in range(len(phi_bins) - 1):
             eta_vertices = [eta_bins[i], eta_bins[i + 1], eta_bins[i + 1], eta_bins[i]]
             phi_vertices = [phi_bins[j], phi_bins[j], phi_bins[j + 1], phi_bins[j + 1]]
-            poly = Polygon(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')
+            poly = PolygonPlt(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')#, closed=True
             color = ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap='viridis').to_rgba(0)
             poly.set_facecolor(color)
             ax.add_patch(poly)
@@ -422,7 +422,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, algo, event, particle):
         bin_key = (eta_vertices, phi_vertices)
         color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(mipPt)
 
-        poly = Polygon(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')
+        poly = PolygonPlt(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')#closed=True
         ax.add_patch(poly)
         poly.set_facecolor(color)
 
