@@ -1,5 +1,5 @@
 # coding: utf-8
-# python mainModuleSums.py --subdet all_subdet --event -1 --algo 8towers --particle photons
+# python mainModuleSums.py --event 5492 --algo baseline --particle photons --subdet CEE
 
 _all_ = [ ]
 
@@ -27,7 +27,7 @@ import processingMS
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Interactive Grid Comparison")
 
-    parser.add_argument("--subdet", default='all_subdet', help="Select subdetector (CEE, CEH, CEH_even, CEH_odd, or all_subdet)") #FIXME
+    parser.add_argument("--subdet", default='all_subdet', help="Select subdetector (CEE, CEH, all_subdet)")
     parser.add_argument("--event", default='5492', help="Select event number or -1 for all events")
     parser.add_argument("--algo", default='8towers', help="Select algorithm (baseline, area_overlap, 8towers)")
     parser.add_argument("--particle", default='photons', help="Select particle type (photons or pions)")
@@ -42,8 +42,8 @@ def main(subdet, event, particle, algo):
     data = process.get_data_new(event) 
     print("Dataframe columns",data.columns)
 
-    bin_geojson_filename = '/geojson/towers_bins.geojson'
-    hex_geojson_filename = '/geojson/hexagons_byesplit.geojson'
+    bin_geojson_filename = '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/towers_bins.geojson'
+    hex_geojson_filename = '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_byesplit.geojson'
     hdf5_filename = f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/hdf5_files/overlap_data_final_{particle}_{event}.h5'
 
     initial_kw = {
@@ -59,7 +59,7 @@ def main(subdet, event, particle, algo):
     process.ModSumToTowers(initial_kw, data , subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename)
 
     #process.save_bin_geo(towers_bins, output_file)
-    #process.save_bin_hex(output_file_hex)
+    #process.save_bin_hex(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_CMSSW.geojson')
 
     #process.plot_bins_with_eta_phi_for_phi_90(input_file, output_dir)
 

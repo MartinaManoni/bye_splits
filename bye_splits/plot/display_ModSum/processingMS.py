@@ -521,10 +521,9 @@ class Processing():
         print("Execution time read hdf5: {:.5f} seconds".format(execution_time1)) 
         return df_hexagon_info
     
-
     #ALGORITHMS
 
-    def baseline(self, df_hexagon_info):
+    def baseline(self, df_hexagon_info, subdet):
         print("Baseline algorithm ...")
         start_time = time.time()
         
@@ -536,6 +535,18 @@ class Processing():
 
         # Get unique layer indices
         unique_layers = np.unique(hexagon_info_array[:, 0])
+
+        # Filter layers if required
+        if subdet == 'CEE':
+            print("CEE subdet ...")
+            unique_layers = unique_layers[unique_layers < 29]
+        elif subdet == 'CEH':
+            print("CEH subdet ...")
+            unique_layers = unique_layers[unique_layers >= 29]
+        else:
+            # No layer selection
+            print("CEE + CEH ...")
+            unique_layers = unique_layers
 
         # Iterate over each layer
         for layer_idx in unique_layers:
@@ -611,8 +622,22 @@ class Processing():
         return df_baseline
     
 
-    def area_overlap(self, df_overlap): 
+    def area_overlap(self, df_overlap, subdet):
         print("Area overlap algorithm ...")
+
+        start_time = time.time()
+
+        if subdet == 'CEE':
+            print("CEE subdet ...")
+            df_overlap = df_overlap[df_overlap['layer'] < 29]
+        elif subdet == 'CEH':
+            print("CEH subdet ...")
+            df_overlap = df_overlap[df_overlap['layer'] >= 29]
+        else:
+            print("CEE + CEH subdet ...")
+            df_overlap = df_overlap
+
+
         # Group DataFrame by 'layer' column
         grouped = df_overlap.groupby('layer')
         
@@ -630,9 +655,9 @@ class Processing():
                     bin_info['mipPt'] = row['ts_mipPt'] * bin_info['percentage_overlap']
                     #print("hex mip, %, bin mip", row['ts_mipPt']," ", bin_info['percentage_overlap'] ," ", bin_info['mipPt'] )
         
-        print("grouped df", grouped)
-        print("DF OVERLAP ALGO", df_overlap.columns)
-        print("DF OVERLAP ALGO", df_overlap)
+        #print("grouped df", grouped)
+        #print("DF OVERLAP ALGO", df_overlap.columns)
+        #print("DF OVERLAP ALGO", df_overlap)
 
         flattened_bins = []
 
@@ -663,10 +688,24 @@ class Processing():
         total_mipPt = df_over_final['mipPt'].sum()
         print("Total mipPt sum:", total_mipPt)
 
+        end_time = time.time()
+        print("Execution time loop - area overlap not opt", end_time-start_time)
+
         return df_over_final
 
-    def area_overlap_8Towers(self, df_hexagon_info):
+    def area_overlap_8Towers(self, df_hexagon_info, subdet):
         print("Algoirthm 1/8s towers ...")
+        start_time = time.time()
+
+        if subdet == 'CEE':
+            print("CEE subdet ...")
+            df_hexagon_info = df_hexagon_info[df_hexagon_info['layer'] < 29]
+        elif subdet == 'CEH':
+            print("CEH subdet ...")
+            df_hexagon_info = df_hexagon_info[df_hexagon_info['layer'] >= 29]
+        else:
+            print("CEE + CEH subdet ...")
+
         # Iterate over unique layer indices
         for layer_idx in df_hexagon_info['layer'].unique():
             # Filter DataFrame for the current layer
@@ -748,6 +787,9 @@ class Processing():
 
         print("flattened bins", flattened_bins_df)   
         print("final bins", df_over_final)  
+
+        end_time = time.time()
+        print("Execution time loop - area 8towers", end_time-start_time)
                    
         return df_over_final
 
@@ -897,6 +939,16 @@ class Processing():
     def save_bin_hex(self, output_file):
         features = []  # List to store GeoJSON features
 
+        # Three different x/y shifts for CE-E (subdet 1), CE-H (subdet 2) for even and odd layers
+        diff_x_subdet1 = -1.387
+        diff_y_subdet1 = -0.601
+
+        diff_x_subdet2_even = -1.387
+        diff_y_subdet2_even = -0.745
+
+        diff_x_subdet2_odd = -1.387
+        diff_y_subdet2_odd = -0.457
+
         # Iterate over each bin in self.ds_geom['si']
         for _, row in self.ds_geom['si'].iterrows():
             layer = row['ts_layer']
@@ -905,7 +957,18 @@ class Processing():
             wv = row['ts_wv']
 
             hex_x, hex_y = row['hex_x'], row['hex_y']
-            hex_polygon = Polygon([(x, y) for x, y in zip(hex_x, hex_y)])
+
+            if layer <= 28:
+                hex_x_shifted = [x + diff_x_subdet1 for x in hex_x]
+                hex_y_shifted = [y + diff_y_subdet1 for y in hex_y]
+            elif layer % 2 == 0:
+                hex_x_shifted = [x + diff_x_subdet2_even for x in hex_x]
+                hex_y_shifted = [y + diff_y_subdet2_even for y in hex_y]
+            else:
+                hex_x_shifted = [x + diff_x_subdet2_odd for x in hex_x]
+                hex_y_shifted = [y + diff_y_subdet2_odd for y in hex_y]
+
+            hex_polygon = Polygon([(x, y) for x, y in zip(hex_x_shifted, hex_y_shifted)])
             
             feature = {
                 'type': 'Feature',
@@ -937,7 +1000,7 @@ class Processing():
         print('Mod sum to towers') 
 
         #plotMS.plot_bins_from_geojson(bin_geojson_filename, 'plot_layers')
-        #plotMS.plot_hexagons_from_geojson(hex_geojson_filename, 'plot_layers')
+        #plotMS.plot_hexagons_from_geojson('/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_CMSSW.geojson', 'plot_layers')
 
         #overlap = self.eval_hex_bin_overlap(data, bin_geojson_filename, f'overlap_data_final_{particle}_{event}.h5')
         
@@ -946,15 +1009,16 @@ class Processing():
         overlap_data = self.read_hdf5_file(hdf5_filename)
 
         if algo == 'baseline':
-            df = self.baseline(overlap_data)
+            df = self.baseline(overlap_data, subdet)
         
         elif algo == 'area_overlap':
-            df = self.area_overlap(overlap_data)
+            df = self.area_overlap(overlap_data, subdet)
+            #df= self.area_overlap_opt(overlap_data)
 
         elif algo == '8towers':
-            df = self.area_overlap_8Towers(overlap_data)  
+            df = self.area_overlap_8Towers(overlap_data, subdet)
         
         else:
             raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap' or '8towers'.")
 
-        plotMS.plot_towers_eta_phi_grid(df, algo, event, particle)
+        plotMS.plot_towers_eta_phi_grid(df, algo, event, particle, subdet)

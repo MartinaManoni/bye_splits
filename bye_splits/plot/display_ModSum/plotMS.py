@@ -385,7 +385,7 @@ def plot_baseline(df_baseline_proj, algo, event, particle):
     plt.savefig(f'{algo}_{particle}_{event}.png', dpi=500)  # Save the plot as an image
     plt.show()
 
-def plot_towers_eta_phi_grid(df_baseline_proj, algo, event, particle):
+def plot_towers_eta_phi_grid(df_baseline_proj, algo, event, particle, subdet):
     fig, ax = plt.subplots(figsize=(10, 8))
 
     # Plotting the grid of bins
@@ -443,7 +443,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, algo, event, particle):
     ax.set_title(f'{algo}_{particle}_{event}')
 
     ax.autoscale()
-    plt.savefig(f'{algo}_{particle}_{event}.png', dpi=500)  # Save the plot as an image
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}.png', dpi=500)  # Save the plot as an image
     plt.show()
 
 
@@ -544,6 +544,7 @@ def plot_bins_from_geojson(geojson_file, output_dir):
 
 def plot_hexagons_from_geojson(geojson_file, output_dir):
         # Read GeoJSON file
+        print("Plotting hexagons form geojson files ...")
         with open(geojson_file, 'r') as f:
             data = json.load(f)
         
@@ -574,6 +575,6 @@ def plot_hexagons_from_geojson(geojson_file, output_dir):
             plt.grid(True)
             
             # Save the plot as a PNG file
-            output_file = os.path.join(output_dir, f'layer_{layer}_hexagons_geojson.png')
+            output_file = os.path.join(output_dir, f'layer_{layer}_hexagons_geojson_CMSSW.png')
             plt.savefig(output_file)
             plt.close()
