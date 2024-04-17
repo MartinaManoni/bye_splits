@@ -564,25 +564,35 @@ def plot_hexagons_from_geojson(geojson_file, output_dir):
             layer = feature['properties']['Layer']
             geometry_coords = feature['geometry']['coordinates'][0]  # Extract coordinates
             polygon = Polygon(geometry_coords)  # Convert to Shapely polygon
+            wu = feature['properties']['wu']  # Extract wu value
+            wv = feature['properties']['wv']  # Extract wv value
             
             # Add the polygon to the corresponding layer
+            # Add the polygon and its wu, wv values to the corresponding layer
             if layer not in layer_hexagons:
-                layer_hexagons[layer] = [polygon]
+                layer_hexagons[layer] = [{'polygon': polygon, 'wu': wu, 'wv': wv}]
             else:
-                layer_hexagons[layer].append(polygon)
-        
+                layer_hexagons[layer].append({'polygon': polygon, 'wu': wu, 'wv': wv})
+
         # Plot hexagons for each layer
         for layer, hexagons in layer_hexagons.items():
             plt.figure(figsize=(8, 6))
-            for hexagon in hexagons:
+            for hexagon_info in hexagons:
+                hexagon = hexagon_info['polygon']
+                wu = hexagon_info['wu']
+                wv = hexagon_info['wv']
                 x, y = hexagon.exterior.xy
                 plt.plot(x, y, color='blue')
+
+                # Calculate centroid of the hexagon
+                centroid = hexagon.centroid
+                plt.text(centroid.x, centroid.y, f'{wu},{wv}', ha='center', va='center', fontsize=3, color='black')
+
             plt.title(f'Layer {layer} - Hexagons')
             plt.xlabel('X Position')
             plt.ylabel('Y Position')
             plt.grid(True)
-            
             # Save the plot as a PNG file
-            output_file = os.path.join(output_dir, f'layer_{layer}_hexagons_geojson_CMSSW.png')
-            plt.savefig(output_file)
+            output_file = os.path.join(output_dir, f'layer_{layer}_hexagons_geojson_CMSSW_LATEST.png')
+            plt.savefig(output_file, dpi = 400)
             plt.close()

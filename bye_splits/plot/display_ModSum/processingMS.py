@@ -213,45 +213,20 @@ class Processing():
         
         ds_si_geo = self.ds_geom['si'].drop_duplicates(subset=['ts_layer', 'ts_wu', 'ts_wv'], keep='first')
 
-
-        '''for layer in range(1, 29):
-            # Filter dataframe for the current layer
-            layer_df = self.ds_geom['si'][self.ds_geom['si']['ts_layer'] == layer]
-            
-            # Extract unique 'z' values for the current layer
-            unique_z_values = layer_df['z'].unique()
-            
-            # Print the layer number and its associated unique 'z' values
-            print(f"Layer {layer} - Unique z values:", unique_z_values)
-
-
-        for layer in range(30, 50):
-            # Filter dataframe for the current layer
-            layer_df = self.ds_geom['si'][self.ds_geom['si']['ts_layer'] == layer]
-            
-            # Extract unique 'z' values for the current layer
-            unique_z_values = layer_df['z'].unique()
-            
-            # Print the layer number and its associated unique 'z' values
-            print(f"Layer {layer} - Unique z values:", unique_z_values)'''    
-
-        #scintillator_df = pd.merge(left=df_tc, right=self.ds_geom['sci'], how='inner',
-                                           #on=['tc_layer', 'tc_wu', 'tc_cu', 'tc_cv'])
         #plotMS.plot_layers(df_ts, ds_new)
         #plotMS.plot_layers_sci(df_tc, self.ds_geom['sci'])
 
-
-        # Merge between data and geometry
+        # Merge between data and geometry SILICON
         silicon_df = pd.merge(left=df_ts, right=ds_si_geo, how='inner',
                                       on=['ts_layer', 'ts_wu', 'ts_wv'])
         silicon_df = silicon_df.drop(['triggercellu','triggercellv','waferorient', 'waferpart','diamond_x', 'diamond_y'], axis=1)
-                
-        #mask_ok = (silicon_df['ts_layer'] >= 28) & (silicon_df['ts_layer'] %2== 0) & (silicon_df['ts_wu'] == 0) & (silicon_df['ts_wv'] == 6)
-        #print("Rows for layers >= 28:")
-        #print(silicon_df[mask_ok])
 
         # Shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW)
         shifted_hex_df = self.shift_hex_values(silicon_df, self.ds_geom['si'], df_ts)
+
+        #SCINT
+
+
 
         print("shifted_hex_df")
         print(shifted_hex_df[['hex_x', 'hex_y']])
@@ -960,6 +935,7 @@ class Processing():
     #SAVING
 
     def save_bin_geo(self, df_bins, output_file):
+        print("saving geometry bins to geojson")
         features = []  # List to store GeoJSON features
 
         # Iterate over each bin in df_bins
@@ -1003,10 +979,11 @@ class Processing():
         }
         # Write GeoJSON data to file
         with open(output_file, 'w') as f:
-            json.dump(feature_collection, f)
+            json.dump(feature_collection, f, indent=4)
 
     def save_bin_hex(self, output_file):
         features = []  # List to store GeoJSON features
+        existing_properties = set()
 
         # Three different x/y shifts for CE-E (subdet 1), CE-H (subdet 2) for even and odd layers
         diff_x_subdet1 = -1.387
@@ -1049,8 +1026,11 @@ class Processing():
                     'wv': wv
                 }
             }
-                
-            features.append(feature)  # Add feature to the list
+
+            feature_properties = (layer, z, wu, wv)  # Tuple representing the properties of the feature
+            if feature_properties not in existing_properties:  # Check if properties already exist
+                existing_properties.add(feature_properties)  # Add properties to the set
+                features.append(feature)  # Add feature to the list
 
         # Create GeoJSON FeatureCollection
         feature_collection = {
@@ -1061,7 +1041,7 @@ class Processing():
         print("saving hexagons geometry in geojson file")
         # Write GeoJSON data to file
         with open(output_file, 'w') as f:
-            json.dump(feature_collection, f)
+            json.dump(feature_collection, f, indent=4)
 
     #SPLITTING
             
