@@ -120,7 +120,64 @@ class Processing():
         processed_combined_ts_df = self.process_event(combined_ts_df)
         return processed_combined_ts_df
     
-    
+    def read_hdf5_structure(self,file_path, group_name='df', indent=0):
+
+        def _print_group_structure(group, indent):
+            for name in group:
+                print(" " * indent + name)
+                if isinstance(group[name], h5py.Group):
+                    _print_group_structure(group[name], indent + 2)
+
+        with h5py.File(file_path, 'r') as f:
+            if group_name in f:
+                group = f[group_name]
+                _print_group_structure(group, indent)
+
+    def read_all_block0_values(self,file_path, group_name='df'):
+        with h5py.File(file_path, 'r') as f:
+            if group_name in f:
+                group = f[group_name]
+                if 'block0_values' in group:
+                    block0_values = group['block0_values']
+                    print("Values in 'block0_values':")
+                    for row in block0_values:
+                        print(row)
+                else:
+                    print("Error: 'block0_values' not found in group {}.".format(group_name))
+            else:
+                print("Error: Group '{}' not found in HDF5 file.".format(group_name))
+
+
+    def get_genpart_data(self, file_path, block0_value, group_name='df'):
+
+        block1_data = []
+        print(block0_value)
+
+        with h5py.File(file_path, 'r') as f:
+            if group_name in f:
+                group = f[group_name]
+                if 'block1_items' in group and 'block1_values' in group:
+                    block0_values = group['block0_values'][:, 0]
+                    #print(" block0_values - events", block0_values)
+                    block1_items = [item.decode() for item in group['block1_items']]
+                    block1_values = group['block1_values']
+                    if block0_value == '-1':
+                        for idx, value in enumerate(block0_values):
+                            block1_data.append(block1_values[idx])
+                    elif int(block0_value) in block0_values:
+                        idx = block0_values.tolist().index(int(block0_value))
+                        block1_data.append(block1_values[idx])
+                    else:
+                        print(f"Block0 value '{block0_value}' not found.")
+
+                    df = pd.DataFrame(block1_data, columns=block1_items)
+                    #print("gen part data: ", df)
+                    return df
+                else:
+                    print("Error: 'block0_values', 'block1_items', or 'block1_values' not found in group {}.".format(group_name))
+            else:
+                print("Error: Group '{}' not found in HDF5 file.".format(group_name))
+
     def store_event(self, path, data):
         if isinstance(data, dict):
             for key, item in data.items():
@@ -132,8 +189,8 @@ class Processing():
             data.to_hdf(self.filename, path)
 
     def process_event(self, df_ts):
-        print("Process events")
-        print("DATA ts columns", df_ts.columns)
+        print("Process events ...")
+        print("Filled data ts columns", df_ts.columns)
         #print("DATA tc columns", df_tc.columns)
 
         ts_keep = {'waferu'       : 'ts_wu',
@@ -149,12 +206,12 @@ class Processing():
         self.ds_geom['si']  = self.ds_geom['si'].rename(columns=ts_keep)
         self.ds_geom['sci'] = self.ds_geom['sci'].rename(columns=sci_update)
 
-        print("GEO silicon columns", self.ds_geom['si'].columns)
+        print("GEOMETRY silicon columns", self.ds_geom['si'].columns)
         #print("GEO scint columns", self.ds_geom['sci'].columns)
         #mask= self.ds_geom['sci']['tc_layer']== 42
         #print("GEO scint columns", self.ds_geom['sci'][mask])
         
-        ds_new = self.ds_geom['si'].drop_duplicates(subset=['ts_layer', 'ts_wu', 'ts_wv'], keep='first')
+        ds_si_geo = self.ds_geom['si'].drop_duplicates(subset=['ts_layer', 'ts_wu', 'ts_wv'], keep='first')
 
 
         '''for layer in range(1, 29):
@@ -185,7 +242,7 @@ class Processing():
 
 
         # Merge between data and geometry
-        silicon_df = pd.merge(left=df_ts, right=ds_new, how='inner',
+        silicon_df = pd.merge(left=df_ts, right=ds_si_geo, how='inner',
                                       on=['ts_layer', 'ts_wu', 'ts_wv'])
         silicon_df = silicon_df.drop(['triggercellu','triggercellv','waferorient', 'waferpart','diamond_x', 'diamond_y'], axis=1)
                 
@@ -194,9 +251,14 @@ class Processing():
         #print(silicon_df[mask_ok])
 
         # Shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW)
-        #shifted_hex_df = self.shift_hex_values(silicon_df, self.ds_geom['si'], df_ts)
+        shifted_hex_df = self.shift_hex_values(silicon_df, self.ds_geom['si'], df_ts)
 
-        return silicon_df
+        print("shifted_hex_df")
+        print(shifted_hex_df[['hex_x', 'hex_y']])
+        print("\nsilicon_df")
+        print(silicon_df[['hex_x', 'hex_y']])
+
+        return shifted_hex_df
             
     def shift_hex_values(self, silicon_df_proc, df_geom, df_ts):
         '''shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW),
@@ -222,16 +284,23 @@ class Processing():
             if row['ts_layer'] <= 28:
                 shifted_df.at[idx, 'hex_x'] = [v + diff_x_subdet1 for v in row['hex_x']]
                 shifted_df.at[idx, 'hex_y'] = [v + diff_y_subdet1 for v in row['hex_y']]
+                shifted_df.at[idx, 'wx_center'] = row['wx_center'] + diff_x_subdet1
+                shifted_df.at[idx, 'wy_center'] = row['wy_center'] + diff_y_subdet1
+
             if (row['ts_layer'] > 28 and row['ts_layer'] %2 ==0):
                 shifted_df.at[idx, 'hex_x'] = [v + diff_x_subdet2_even for v in row['hex_x']]
-                shifted_df.at[idx, 'hex_y'] = [v + diff_y_subdet2_even for v in row['hex_y']]   
+                shifted_df.at[idx, 'hex_y'] = [v + diff_y_subdet2_even for v in row['hex_y']]
+                shifted_df.at[idx, 'wx_center'] = row['wx_center'] + diff_x_subdet2_even
+                shifted_df.at[idx, 'wy_center'] = row['wy_center'] + diff_x_subdet2_even
             if (row['ts_layer'] > 28 and row['ts_layer'] %2 !=0):
                 shifted_df.at[idx, 'hex_x'] = [v + diff_x_subdet2_odd for v in row['hex_x']]
-                shifted_df.at[idx, 'hex_y'] = [v + diff_y_subdet2_odd for v in row['hex_y']]      
+                shifted_df.at[idx, 'hex_y'] = [v + diff_y_subdet2_odd for v in row['hex_y']]
+                shifted_df.at[idx, 'wx_center'] = row['wx_center'] + diff_x_subdet2_odd
+                shifted_df.at[idx, 'wy_center'] = row['wy_center'] + diff_x_subdet2_odd
 
         # Plot shifted modules for chosen layer
-        #layer_number= 44
-        #plotMS.plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_number)
+        layer_number= 41
+        plotMS.plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_number)
         
         return shifted_df    
     
@@ -339,7 +408,7 @@ class Processing():
 
     def eval_hex_bin_overlap(self, data, df_bin, hdf5_filename):
         num_cores = multiprocessing.cpu_count()
-        print("Number of CPU cores:", num_cores)
+        #print("Number of CPU cores:", num_cores)
 
         print("Evaluating overlap between hexagons and towers bins layer by layer")
         hexagon_info = [] #list of dictionaries 
@@ -996,13 +1065,11 @@ class Processing():
 
     #SPLITTING
             
-    def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename):    
+    def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename, data_gen):
         print('Mod sum to towers') 
 
         #plotMS.plot_bins_from_geojson(bin_geojson_filename, 'plot_layers')
         #plotMS.plot_hexagons_from_geojson('/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_CMSSW.geojson', 'plot_layers')
-
-        #overlap = self.eval_hex_bin_overlap(data, bin_geojson_filename, f'overlap_data_final_{particle}_{event}.h5')
         
         #plotMS.plot_hex_bin_overlap_save(hdf5_filename, '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/plot_layers/plot_overlap/')
 
@@ -1021,4 +1088,4 @@ class Processing():
         else:
             raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap' or '8towers'.")
 
-        plotMS.plot_towers_eta_phi_grid(df, algo, event, particle, subdet)
+        plotMS.plot_towers_eta_phi_grid(df, data_gen, algo, event, particle, subdet)

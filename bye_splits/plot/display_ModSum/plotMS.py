@@ -204,8 +204,9 @@ def plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_numb
     df_ts = df_ts[(df_ts['ts_layer']==layer_number) & (df_ts['ts_eta']> 0) ]
 
     plt.figure(figsize=(8, 6))
-    plt.scatter(before_shift['wx_center'], before_shift['wy_center'], label='Byesplit geometry (after merge)', color='red', s=1)
-    plt.scatter(before_shift['ts_x'], before_shift['ts_y'], label='ntuples data (after merge)', color='black', s=1)
+    plt.scatter(before_shift['wx_center'], before_shift['wy_center'], label='Byesplit geometry (after merge) BEFORE SHIFT', color='red', s=1)
+    plt.scatter(after_shift['wx_center'], after_shift['wy_center'], label='Byesplit geometry (after merge) AFTER SHIFT', color='green', s=1)
+    #plt.scatter(before_shift['ts_x'], before_shift['ts_y'], label='ntuples data (after merge)', color='black', s=1)
     #plt.scatter(df_ts['ts_x'], df_ts['ts_y'], label='ntuples data (before merge)', color='cyan', s=1)
     #plt.scatter(df_geom_m['wx_center'], df_geom_m['wy_center'], label='CMSSW geom marco (before emerge)', color='green', s=0.5)
 
@@ -213,9 +214,12 @@ def plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_numb
     for idx, row in before_shift.iterrows():
         plt.text(row['wx_center'], row['wy_center']+2, f"U:{row['ts_wu']}, V:{row['ts_wv']}", fontsize=3, color='red')
 
+    for idx, row in after_shift.iterrows():
+        plt.text(row['wx_center'], row['wy_center']+2, f"U:{row['ts_wu']}, V:{row['ts_wv']}", fontsize=3, color='green')
+
     # Plot wafer U and wafer V for ts_x/ts_y  (ntuples data after data/geometry merge)
-    for idx, row in before_shift.iterrows():
-        plt.text(row['ts_x'], row['ts_y'], f"U={row['ts_wu']}, V={row['ts_wv']}", fontsize=3)    
+    #for idx, row in before_shift.iterrows():
+        #plt.text(row['ts_x'], row['ts_y'], f"U={row['ts_wu']}, V={row['ts_wv']}", fontsize=3)
 
     # Plot wafer U and wafer V for wx_center/wy_center (CMSSW geometry)
     #for idx, row in df_geom_m.iterrows():
@@ -244,7 +248,7 @@ def plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_numb
     plt.ylabel('y')
     plt.legend()
     plt.grid(True)
-    plt.savefig(f"/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/Layer{layer_number}_OKAY_hex.png", dpi = 400)
+    plt.savefig(f"/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/Layer{layer_number}_NEW_MART_2.png", dpi = 400)
 
 def plot_group_positions(final_projected_df):
     # Define colors for each group
@@ -385,7 +389,7 @@ def plot_baseline(df_baseline_proj, algo, event, particle):
     plt.savefig(f'{algo}_{particle}_{event}.png', dpi=500)  # Save the plot as an image
     plt.show()
 
-def plot_towers_eta_phi_grid(df_baseline_proj, algo, event, particle, subdet):
+def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, subdet):
     fig, ax = plt.subplots(figsize=(10, 8))
 
     # Plotting the grid of bins
@@ -429,6 +433,10 @@ def plot_towers_eta_phi_grid(df_baseline_proj, algo, event, particle, subdet):
         text_x = np.mean(eta_vertices)
         text_y = np.mean(phi_vertices)
         ax.text(text_x, text_y, f'{mipPt:.1f}', color='black', ha='center', va='center', fontsize=5)
+
+    if event != '-1':
+        # Overlay gen_eta and gen_phi points
+        ax.scatter(data_gen['gen_eta'], data_gen['gen_phi'], marker='x', color='red', label='Gen Points')
 
     # Add color bar
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
