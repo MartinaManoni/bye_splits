@@ -436,6 +436,9 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
 
     if event != '-1':
         # Overlay gen_eta and gen_phi points
+        print('gen_eta', data_gen['gen_eta'])
+        print('gen_phi', data_gen['gen_phi'])
+        print('gen_eta', data_gen['gen_pt'])
         ax.scatter(data_gen['gen_eta'], data_gen['gen_phi'], marker='x', color='red', label='Gen Points')
 
     # Add color bar
@@ -533,19 +536,20 @@ def plot_bins_from_geojson(geojson_file, output_dir):
         for layer, bins in layer_bins.items():
             plt.figure(figsize=(8, 6))
             for bin_geometry in bins:
-                plt.plot(*bin_geometry.exterior.xy, color='blue')
+                plt.plot(*bin_geometry.exterior.xy, color='black', linewidth=0.5)
+                plt.gca().set_aspect('equal', adjustable='datalim')
 
             for i in range(10, 251, 10):  # Start from 10 cm to 250 cm, increment by 10
                 plt.plot([-1, 1], [i, i], color='black', linewidth=0.5)  # Draw ticks between x=-1 and x=1
 
 
-            plt.title(f'Layer {layer} - Bins')
+            plt.title(f'Layer {layer} - Towers')
             plt.xlabel('X Position')
             plt.ylabel('Y Position')
             plt.grid(True)
             
             # Save the plot as a PNG file
-            output_file = os.path.join(output_dir, f'layer_{layer}_bins_geojson.png')
+            output_file = os.path.join(output_dir, f'layer_{layer}_bins_geojson_vertex.png')
             plt.savefig(output_file)
             plt.close()                       
 
@@ -596,3 +600,80 @@ def plot_hexagons_from_geojson(geojson_file, output_dir):
             output_file = os.path.join(output_dir, f'layer_{layer}_hexagons_geojson_CMSSW_LATEST.png')
             plt.savefig(output_file, dpi = 400)
             plt.close()
+
+
+def plot_bins_and_hexagons_from_geojson(bins_geojson_file, hexagons_geojson_file, output_dir):
+    # Read bins GeoJSON file
+    with open(bins_geojson_file, 'r') as f:
+        bins_data = json.load(f)
+
+    # Read hexagons GeoJSON file
+    with open(hexagons_geojson_file, 'r') as f:
+        hexagons_data = json.load(f)
+
+    # Dictionary to store bins and hexagons grouped by layer
+    layer_data = {}
+
+    # Process bins data
+    for feature in bins_data['features']:
+        layer = feature['properties']['Layer']
+        geometry = shape(feature['geometry'])  # Convert GeoJSON geometry to Shapely geometry
+        eta_vertices = feature['properties']['Eta_vertices']
+
+        if layer not in layer_data:
+            layer_data[layer] = {'bins': [], 'hexagons': []}
+
+        layer_data[layer]['bins'].append({'geometry': geometry, 'eta_vertices': eta_vertices})
+
+    # Process hexagons data
+    for feature in hexagons_data['features']:
+        layer = feature['properties']['Layer']
+        geometry = shape(feature['geometry'])  # Convert GeoJSON geometry to Shapely geometry
+        wu = feature['properties']['wu']  # Extract wu/wv values
+        wv = feature['properties']['wv']
+
+        if layer not in layer_data:
+            layer_data[layer] = {'bins': [], 'hexagons': []}
+
+        layer_data[layer]['hexagons'].append({'geometry': geometry, 'wu': wu, 'wv': wv})
+
+    # Plot bins and hexagons for each layer
+    for layer, data in layer_data.items():
+        plt.figure(figsize=(8, 6))
+
+        # Plot bins
+        for i, bin_info in enumerate(data['bins']):
+            bin_geometry = bin_info['geometry']
+            eta_vertices = bin_info['eta_vertices']
+
+            plt.plot(*bin_geometry.exterior.xy, color='black', linewidth=0.2)
+
+            # Add 'Eta' value for the bottom right corner for the first 20 bins
+            if i < 20:
+                bottom_right_eta = round(eta_vertices[3], 2)
+                bottom_right_x, bottom_right_y = bin_geometry.exterior.coords[3]
+                plt.text(bottom_right_x, bottom_right_y, f'{bottom_right_eta}', ha='center', va='top', fontsize=2, color='black',  rotation=+90)
+
+        # Plot hexagons
+        for hexagon_info in data['hexagons']:
+            hexagon_geometry = hexagon_info['geometry']
+            wu = hexagon_info['wu']
+            wv = hexagon_info['wv']
+
+            x, y = hexagon_geometry.exterior.xy
+            plt.plot(x, y, color='red', linewidth=0.7)
+
+            # Calculate centroid of the hexagon
+            centroid = hexagon_geometry.centroid
+            plt.text(centroid.x, centroid.y, f'{wu},{wv}', ha='center', va='center', fontsize=5, color='red', weight='bold')
+
+        plt.title(f'Layer {layer} - Tower bins and Hexagons')
+        plt.xlabel('X Position')
+        plt.ylabel('Y Position')
+        plt.grid(True)
+
+        # Save the plot as a PNG file
+        output_file = os.path.join(output_dir, f'layer_{layer}_bins_and_hexagons.png')
+        plt.savefig(output_file, dpi=700)
+        plt.close()
+           
