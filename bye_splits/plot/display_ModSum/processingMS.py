@@ -29,9 +29,10 @@ import processingMS
 import plotMS
 from scipy.spatial.distance import cdist
 from shapely import geometry as geom
-from shapely.geometry import Polygon, mapping, shape
+from shapely.geometry import Polygon, mapping, shape, Point
 from matplotlib.patches import Polygon as matPoly
 from matplotlib.collections import PatchCollection
+
 
 
 class Processing():
@@ -114,7 +115,8 @@ class Processing():
                             all_tc_event_dfs.append(df_tc)  # Append each tc event data frame to the list
         
         combined_ts_df = pd.concat(all_ts_event_dfs, ignore_index=True)
-        #combined_tc_df = pd.concat(all_tc_event_dfs, ignore_index=True)
+        combined_tc_df = pd.concat(all_tc_event_dfs, ignore_index=True)
+        print("DATAFRAME TC", combined_tc_df.columns)
         
         # Process the combined ts DataFrame
         processed_combined_ts_df = self.process_event(combined_ts_df)
@@ -225,6 +227,11 @@ class Processing():
         shifted_hex_df = self.shift_hex_values(silicon_df, self.ds_geom['si'], df_ts)
 
         #SCINT
+        #scintillator_df = pd.merge(left=df_tc, right=self.ds_geom['sci'], how='inner',
+                                           #on=['tc_layer', 'tc_wu', 'tc_cu', 'tc_cv'])
+        print("SCINT GEOM columns",self.ds_geom['sci'].columns)
+        print("SCINT GEOM",self.ds_geom['sci']['x'])
+
 
 
 
@@ -274,7 +281,7 @@ class Processing():
                 shifted_df.at[idx, 'wy_center'] = row['wy_center'] + diff_x_subdet2_odd
 
         # Plot shifted modules for chosen layer
-        layer_number= 41
+        layer_number= 15
         plotMS.plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_number)
         
         return shifted_df    
@@ -934,9 +941,11 @@ class Processing():
 
     #SAVING
 
-    def save_bin_geo(self, df_bins, output_file):
+    def save_bin_geo(self, df_bins, output_file, output_file_vertex):
         print("saving geometry bins to geojson")
-        features = []  # List to store GeoJSON features
+        # Lists to store GeoJSON features
+        features_bin_poly_with_arcs = []
+        features_vertices = []
 
         # Iterate over each bin in df_bins
         for _, row in df_bins.iterrows():
@@ -955,11 +964,11 @@ class Processing():
                 eta_vertices_list = eta_vertices.tolist() if isinstance(eta_vertices, np.ndarray) else eta_vertices
                 phi_vertices_list = phi_vertices.tolist() if isinstance(phi_vertices, np.ndarray) else phi_vertices
 
-                # Create a Shapely polygon from bin vertices
+                # Create a tower bin with arcs using Shapely
                 bin_polygon = self.create_bin_polygon(x_vertices, y_vertices, eta_vertices, phi_vertices, center)
-                
+
                 # Convert Shapely polygon to GeoJSON feature
-                feature = {
+                feature_bin_poly_with_arcs = {
                     'type': 'Bin',
                     'geometry': mapping(bin_polygon),  # Convert polygon to GeoJSON geometry
                     'properties': {
@@ -969,17 +978,49 @@ class Processing():
                         'Phi_vertices': phi_vertices_list,
                     }
                 }
-                
-                features.append(feature)  # Add feature to the list
+                features_bin_poly_with_arcs.append(feature_bin_poly_with_arcs)  # Add feature to the list
+
+
+                # Create a tower bin with with only the four vertices using Shapely
+                vertices_polygon = Polygon(zip(x_vertices, y_vertices))
+
+
+                # Convert Shapely polygon to GeoJSON feature with vertices as geometry
+                feature_vertices = {
+                    'type': 'Feature',
+                    'geometry': mapping(vertices_polygon),  # Convert polygon to GeoJSON geometry
+                    'properties': {
+                        'Layer': layer,
+                        'Z_value': z,
+                        'Eta_vertices': eta_vertices_list,
+                        'Phi_vertices': phi_vertices_list,
+                    }
+                }
+                features_vertices.append(feature_vertices)  # Add feature to the list
 
         # Create GeoJSON FeatureCollection
         feature_collection = {
             'type': 'FeatureCollection',
-            'features': features
+            'features': features_bin_poly_with_arcs
         }
         # Write GeoJSON data to file
         with open(output_file, 'w') as f:
             json.dump(feature_collection, f, indent=4)
+
+        print("GeoJSON with bin poly with arcs saved to:", output_file)
+
+        # Create GeoJSON FeatureCollection for polygon features
+        feature_collection_vertices = {
+            'type': 'FeatureCollection',
+            'features': features_vertices
+        }
+
+        # Write GeoJSON data with bin_polygon geometry to file
+        with open(output_file_vertex, 'w') as f_polygon:
+            json.dump(feature_collection_vertices, f_polygon, indent=4)
+
+        print("GeoJSON with bin poly, only vertices, saved to:", output_file_vertex)
+
 
     def save_bin_hex(self, output_file):
         features = []  # List to store GeoJSON features
@@ -1049,6 +1090,8 @@ class Processing():
         print('Mod sum to towers') 
 
         #plotMS.plot_bins_from_geojson(bin_geojson_filename, 'plot_layers')
+        #plotMS.plot_bins_and_hexagons_from_geojson(bin_geojson_filename, hex_geojson_filename, 'plot_layers')
+
         #plotMS.plot_hexagons_from_geojson('/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_CMSSW.geojson', 'plot_layers')
         
         #plotMS.plot_hex_bin_overlap_save(hdf5_filename, '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/plot_layers/plot_overlap/')
