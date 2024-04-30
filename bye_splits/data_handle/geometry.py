@@ -45,6 +45,7 @@ class GeometryData(BaseData):
         self.cu, self.cv = 'triggercellu', 'triggercellv'
         self.ceta, self.cphi = 'triggercellieta', 'triggercelliphi'
         self.wu, self.wv = 'waferu', 'waferv'
+        self.tc_eta, self.tc_phi = 'eta', 'phi'
 
         ## geometry-specific parameters
         self.waferWidth = self.cfg['geometry']['waferSize'] #this defines all other sizes
@@ -255,13 +256,13 @@ class GeometryData(BaseData):
         df = df.merge(minmax, on='layer', how='inner')
 
         df['R'] = np.sqrt(df.x*df.x + df.y*df.y)
-        df['phi'] = np.arctan2(df.y, df.x)
+        df['phi_n'] = np.arctan2(df.y, df.x)
 
         # phi-adjacent trigger tiles have a phi separation of 2.5 degrees,
         # for all layers
         conv_to_radians = lambda k : k*np.pi/180.
-        df['phimin'] = df.phi - conv_to_radians(1.25)
-        df['phimax'] = df.phi + conv_to_radians(1.25)
+        df['phimin'] = df.phi_n - conv_to_radians(1.25)
+        df['phimax'] = df.phi_n + conv_to_radians(1.25)
 
         # assume the tiles are squared; their arclength (equal to the width
         # for small values) is equal to their height
@@ -279,7 +280,7 @@ class GeometryData(BaseData):
         df.loc[~(df.layer>=41) &
                (df.triggercellieta==df.min_ieta), 'rmax'] -= arc_dist/2
         
-        df = df.drop(['R', 'arc', 'phi', 'min_ieta', 'max_ieta'], axis=1)
+        df = df.drop(['R', 'arc', 'phi_n', 'min_ieta', 'max_ieta'], axis=1)
 
         if self.library == 'plotly':
             df = self._display_plotly_sci_cartesian(df)
@@ -302,7 +303,15 @@ class GeometryData(BaseData):
         df['diamond_y']= df_sci[['x1','x2','x3','x4']].values.tolist()
         df['diamond_x']= df_sci[['y1','y2','y3','y4']].values.tolist()
 
+        df = self.round_coordinates(df)
+
         return df.drop(columns=['rmin', 'rmax', 'phimin', 'phimax'])
+
+    def round_coordinates(self, df):
+        rounded_df = df.copy()
+        for col in ['diamond_x', 'diamond_y']:
+            rounded_df[col] = rounded_df[col].apply(lambda coords: [round(x, 3) for x in coords])
+        return rounded_df
    
     def cil2cart(self, r, phi):
         x, y = r*np.cos(np.pi/2-phi), r*np.sin(np.pi/2-phi)
@@ -340,12 +349,12 @@ class GeometryData(BaseData):
                 self.logger.debug('Storing geometry data...')
             self.store(section, region, lrange)
 
+
         if self.dataset is None: # use cached dataset (currently will never happen)
             if self.logger is not None:
                 self.logger.debug('Retrieving geometry data...')
             ds = ak.from_parquet(self.outpath)
             self.dataset = self._parquet_to_geom(ds, section, region, lrange)
-         
         return self.dataset
 
     def _readvars(self):
@@ -426,6 +435,10 @@ class GeometryData(BaseData):
             ceh_sel = (data.subdet==2) | (data.subdet==10)
             data['layer'] = data.layer + nl*ak.values_astype(ceh_sel, to=int)
             data = data[((data.layer<=nl) & (data.layer%2==1)) | (data.layer>nl)]
+
+            #going from CMSSW to byesplit layers numbering
+            #This calculation effectively adds nlayersCEE (28)
+            #to the 'layer' values where ceh_sel is True, leaving other values unchanged
 
             #below is correct but much slower (no operator isin in awkward)
             #this cut is anyways implemented in the skimmer

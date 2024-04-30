@@ -236,7 +236,7 @@ class Processing():
 
         self.add_scint_modules_var(self.ds_geom['sci'])
         scint_mod_geom = self.create_scint_mod_geometry(self.ds_geom['sci'])
-        #plotMS.plot_scint_modules(geom_poly_scint_develop)
+        #plotMS.plot_scint_modules(scint_mod_geom)
         #plotMS.plot_scint_tiles(self.ds_geom['sci'])
         print("Scintillator geometry", scint_mod_geom.columns)
 
@@ -289,11 +289,6 @@ class Processing():
 
             # Extract coordinates of all sub-polygons directly from the diamond polygons
             all_coords = [list(polygon.exterior.coords) for polygon in diamond_polygons]
-
-            for polygon_coords in all_coords:
-                for i in range(len(polygon_coords)):
-                    x, y = polygon_coords[i]
-                    polygon_coords[i] = (round(x, 3), round(y, 3))
 
             # Flatten the list of coordinates
             flat_coords = [coord for sublist in all_coords for coord in sublist]
