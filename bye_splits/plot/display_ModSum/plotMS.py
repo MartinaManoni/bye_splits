@@ -24,7 +24,8 @@ from matplotlib.patches import Polygon as PolygonPlt
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
 from shapely import geometry as geom
-from shapely.geometry import Polygon, mapping, shape
+from shapely.geometry import Polygon, mapping, shape, MultiPolygon
+from shapely.ops import unary_union
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -677,3 +678,76 @@ def plot_bins_and_hexagons_from_geojson(bins_geojson_file, hexagons_geojson_file
         plt.savefig(output_file, dpi=700)
         plt.close()
            
+def plot_scint_tiles(df):
+    for layer in df['tc_layer'].unique():
+        print("layer num", layer)
+        layer_df = df[df['tc_layer'] == layer]
+
+        # Extracting x, y, diamond_x, and diamond_y for the current layer
+        x = layer_df['x']
+        y = layer_df['y']
+        eta = layer_df['eta']
+        phi = layer_df['phi']
+        ts_ieta = layer_df['ts_ieta']
+        ts_iphi = layer_df['ts_iphi']
+        tc_cu = layer_df['tc_cu']
+        tc_cv = layer_df['tc_cv']
+        diamond_x = layer_df['diamond_x']
+        diamond_y = layer_df['diamond_y']
+
+        # Plotting x and y variables
+        plt.plot(x, y, 'o', label='x, y',markersize=0.5)
+
+        for i in range(len(x)):
+            #plt.text(x.iloc[i], y.iloc[i], f'{tc_cu.iloc[i]},{tc_cv.iloc[i]}', ha='center', va='center', fontsize=1, color='black')
+            #plt.text(x.iloc[i], y.iloc[i], f'{eta.iloc[i]:.2f},{phi.iloc[i]:.2f}', ha='center', va='center', fontsize=1, color='black')
+            plt.text(x.iloc[i], y.iloc[i], f'{ts_ieta.iloc[i]}, {ts_iphi.iloc[i]}', ha='center', va='center', fontsize=1, color='black')
+
+        # Plotting diamond_x and diamond_y as polygons
+        for i in range(len(diamond_x)):
+            plt.fill(diamond_x.iloc[i], diamond_y.iloc[i], alpha=0.5)
+
+        # Adding labels and legend
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.title(f'TC Layer {layer}')
+        plt.legend()
+        plt.grid(True)
+
+        # If filename is provided, save the plot as PNG
+        output_dir = '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/plot_scint/'
+        output_file = os.path.join(output_dir, f'Layer_{layer}_scintillator_ieta_iphi.png')
+        plt.savefig(output_file, dpi=700)
+        plt.close()
+        print(f"Plot for layer {layer} saved as {output_file}")
+
+def plot_scint_modules(df):
+    # Group the DataFrame by layer
+    grouped_df = df.groupby('tc_layer')
+
+    for layer, layer_df in grouped_df:
+        # Create a new figure for each layer
+        plt.figure()
+        plt.title(f'Scintillator Modules - Layer {layer}')
+
+        # Loop through each row in the layer DataFrame
+        for _, row in layer_df.iterrows():
+            # Extract vertices for the current row
+            vertices = row['vertices_clockwise']
+            x_coords, y_coords = zip(*vertices)
+
+            # Plot the diamond polygon for the current row
+            plt.plot(x_coords + (x_coords[0],), y_coords + (y_coords[0],), linewidth=0.4, color = 'black') #linewidth=0.5 #'bo-'
+
+        # Set axis labels
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        # Add grid
+        plt.grid(True)
+        # Set equal scaling on axes
+        plt.axis('equal')
+        # Save the plot
+        output_dir = '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/plot_scint/'
+        output_file = os.path.join(output_dir, f'Layer_{layer}_ScintillatorModules.png')
+        plt.savefig(output_file, dpi=400)
+        plt.close()

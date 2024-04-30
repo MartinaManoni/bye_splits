@@ -29,7 +29,8 @@ import processingMS
 import plotMS
 from scipy.spatial.distance import cdist
 from shapely import geometry as geom
-from shapely.geometry import Polygon, mapping, shape, Point
+from shapely.geometry import Polygon, mapping, shape, MultiPolygon, Point
+from shapely.ops import unary_union
 from matplotlib.patches import Polygon as matPoly
 from matplotlib.collections import PatchCollection
 
@@ -107,6 +108,8 @@ class Processing():
                             df_ts = pd.DataFrame(dataset[:], columns=column_names)
                             df_ts['event'] = int(event)  # Add a new column for the event number
                             all_ts_event_dfs.append(df_ts)  # Append each ts event data frame to the list
+
+                        #FIXME - Temporary processing tc data
                         elif 'tc' in key:
                             dataset = file[key]
                             column_names = [str(col) for col in dataset.attrs['columns']]
@@ -116,10 +119,10 @@ class Processing():
         
         combined_ts_df = pd.concat(all_ts_event_dfs, ignore_index=True)
         combined_tc_df = pd.concat(all_tc_event_dfs, ignore_index=True)
-        print("DATAFRAME TC", combined_tc_df.columns)
+        print("tc data dataframe", combined_tc_df.columns)
         
         # Process the combined ts DataFrame
-        processed_combined_ts_df = self.process_event(combined_ts_df)
+        processed_combined_ts_df = self.process_event(combined_ts_df,combined_tc_df) #FIXME - Temporary adding tc data
         return processed_combined_ts_df
     
     def read_hdf5_structure(self,file_path, group_name='df', indent=0):
@@ -190,10 +193,10 @@ class Processing():
         else:
             data.to_hdf(self.filename, path)
 
-    def process_event(self, df_ts):
+    def process_event(self, df_ts, df_tc):
         print("Process events ...")
         print("Filled data ts columns", df_ts.columns)
-        #print("DATA tc columns", df_tc.columns)
+        print("DATA tc columns", df_tc.columns)
 
         ts_keep = {'waferu'       : 'ts_wu',
                    'waferv'       : 'ts_wv',
@@ -208,6 +211,7 @@ class Processing():
         self.ds_geom['si']  = self.ds_geom['si'].rename(columns=ts_keep)
         self.ds_geom['sci'] = self.ds_geom['sci'].rename(columns=sci_update)
 
+        #SILICON
         print("GEOMETRY silicon columns", self.ds_geom['si'].columns)
         #print("GEO scint columns", self.ds_geom['sci'].columns)
         #mask= self.ds_geom['sci']['tc_layer']== 42
@@ -226,14 +230,18 @@ class Processing():
         # Shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW)
         shifted_hex_df = self.shift_hex_values(silicon_df, self.ds_geom['si'], df_ts)
 
-        #SCINT
-        #scintillator_df = pd.merge(left=df_tc, right=self.ds_geom['sci'], how='inner',
-                                           #on=['tc_layer', 'tc_wu', 'tc_cu', 'tc_cv'])
-        print("SCINT GEOM columns",self.ds_geom['sci'].columns)
-        print("SCINT GEOM",self.ds_geom['sci']['x'])
+        #SCINTILLATOR
+        #Adding scintillator modules to scintillator geometry - reproducing what is done at the moment in CMSSW:
+        #https://github.com/hgc-tpg/cmssw/blob/hgc-tpg-devel-CMSSW_14_0_0_pre1/L1Trigger/L1THGCal/plugins/geometries/HGCalTriggerGeometryV9Imp3.cc#L989
 
+        self.add_scint_modules_var(self.ds_geom['sci'])
+        scint_mod_geom = self.create_scint_mod_geometry(self.ds_geom['sci'])
+        #plotMS.plot_scint_modules(geom_poly_scint_develop)
+        #plotMS.plot_scint_tiles(self.ds_geom['sci'])
+        print("Scintillator geometry", scint_mod_geom.columns)
 
-
+        scintillator_df = pd.merge(left=df_tc, right=self.ds_geom['sci'], how='inner', #FIXME
+                                           on=['tc_layer', 'tc_wu', 'tc_cu', 'tc_cv'])
 
         print("shifted_hex_df")
         print(shifted_hex_df[['hex_x', 'hex_y']])
@@ -241,7 +249,117 @@ class Processing():
         print(silicon_df[['hex_x', 'hex_y']])
 
         return shifted_hex_df
-            
+
+    def add_scint_modules_var(self, df):
+        #Adding to the dataframe ieta (ts_ieta) and iphi (ts_iphi) identifier for scintillator modules
+        hSc_tcs_per_module_phi = 4
+        hSc_back_layers_split = 8
+        hSc_front_layers_split = 12
+        hSc_layer_for_split = 40
+
+        df['ts_iphi'] = (df['tc_cv'] - 1) // hSc_tcs_per_module_phi
+
+        split = hSc_front_layers_split
+        if df['tc_layer'].iloc[0] > hSc_layer_for_split:
+            split = hSc_back_layers_split
+
+        df['ts_ieta'] = df.apply(lambda row: 0 if row['tc_cu'] <= split else 1, axis=1)
+
+    def create_scint_mod_geometry(self, df):
+        # Group DataFrame by ts_ieta, ts_iphi, and tc_layer
+        grouped = df.groupby(['ts_ieta', 'ts_iphi', 'tc_layer'])
+        merged_geometries = []
+
+        for (ts_ieta, ts_iphi, tc_layer), group in grouped:
+            # Create a list to store individual diamond polygons
+            diamond_polygons = []
+            # Iterate over rows in the group and create Shapely Polygon objects
+            for _, row in group.iterrows():
+                # Define vertices of the diamond polygon
+                vertices = [
+                    (row['diamond_x'][0], row['diamond_y'][0]),
+                    (row['diamond_x'][1], row['diamond_y'][1]),
+                    (row['diamond_x'][2], row['diamond_y'][2]),
+                    (row['diamond_x'][3], row['diamond_y'][3]),
+                ]
+                # Create a Polygon object
+                polygon = Polygon(vertices)
+                # Add polygon to the list
+                diamond_polygons.append(polygon)
+
+            # Extract coordinates of all sub-polygons directly from the diamond polygons
+            all_coords = [list(polygon.exterior.coords) for polygon in diamond_polygons]
+
+            for polygon_coords in all_coords:
+                for i in range(len(polygon_coords)):
+                    x, y = polygon_coords[i]
+                    polygon_coords[i] = (round(x, 3), round(y, 3))
+
+            # Flatten the list of coordinates
+            flat_coords = [coord for sublist in all_coords for coord in sublist]
+
+            # Find min and max x and y coordinates for all sub-polygons
+            x_coords, y_coords = zip(*flat_coords)
+            x_min, x_max = min(x_coords), max(x_coords)
+            y_min, y_max = min(y_coords), max(y_coords)
+
+            # Find the corresponding y-coordinate or x-coordinate #FIXME
+            Y_x_min = self.find_corresponding_y(x_min, all_coords)
+            Y_x_max = self.find_corresponding_y(x_max, all_coords)
+            X_y_min = self.find_corresponding_x(y_min, all_coords)
+            X_y_max = self.find_corresponding_x(y_max, all_coords)
+
+            ordered_vertices = self.order_vertices_clockwise([(x_min, Y_x_min), (x_max, Y_x_max), (X_y_max, y_max), (X_y_min, y_min)])
+
+            # Check for repeated vertices
+            #if len(set(map(tuple, ordered_vertices))) < len(ordered_vertices):
+                #print(f"Repeated vertices found in Layer {tc_layer}: {ordered_vertices}")
+
+            # Append the result to the new DataFrame
+            merged_geometries.append({'ts_ieta': ts_ieta, 'ts_iphi': ts_iphi, 'tc_layer': tc_layer,
+                                  'geometry': diamond_polygons, 'vertices_clockwise': ordered_vertices})
+
+        merged_df = pd.DataFrame(merged_geometries)
+        return merged_df
+
+    def order_vertices_clockwise(self, vertices):
+        centroid = Polygon(vertices).centroid
+        centroid_x, centroid_y = centroid.x, centroid.y
+        # Convert vertices list to NumPy array
+        vertices_array = np.array(vertices)
+        # Calculate angles with respect to centroid
+        angles = np.arctan2(vertices_array[:, 1] - centroid_y, vertices_array[:, 0] - centroid_x)
+        # Sort vertices based on angles
+        sorted_indices = np.argsort(angles)
+        ordered_vertices = vertices_array[sorted_indices]
+
+        return ordered_vertices.tolist()
+
+    def find_corresponding_y(self, x, all_coords):
+        closest_y = None
+        min_distance = float('inf')
+        for coord in all_coords:
+            for x_val, y_val in coord:
+                if x_val == x:
+                    distance = abs(y_val)
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_y = y_val
+        return closest_y
+
+    def find_corresponding_x(self, y, all_coords):
+        closest_x = None
+        min_distance = float('inf')
+        for coord in all_coords:
+            for x_val, y_val in coord:
+                if y_val == y:
+                    distance = abs(x_val)
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_x = x_val
+        return closest_x
+
+
     def shift_hex_values(self, silicon_df_proc, df_geom, df_ts):
         '''shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW),
            in order to maintain as center of the hexagon the orginal ts_x/ts_y. 
@@ -281,8 +399,8 @@ class Processing():
                 shifted_df.at[idx, 'wy_center'] = row['wy_center'] + diff_x_subdet2_odd
 
         # Plot shifted modules for chosen layer
-        layer_number= 15
-        plotMS.plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_number)
+        #layer_number= 15
+        #plotMS.plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_number)
         
         return shifted_df    
     
