@@ -236,7 +236,6 @@ class Processing():
 
         self.add_scint_modules_var(self.ds_geom['sci'])
         scint_mod_geom = self.create_scint_mod_geometry(self.ds_geom['sci'])
-        #plotMS.plot_scint_modules(scint_mod_geom)
         #plotMS.plot_scint_tiles(self.ds_geom['sci'])
         print("Scintillator geometry", scint_mod_geom.columns)
 
@@ -315,6 +314,9 @@ class Processing():
                                   'geometry': diamond_polygons, 'vertices_clockwise': ordered_vertices})
 
         merged_df = pd.DataFrame(merged_geometries)
+
+        self.save_scint_mod_geo(merged_df, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/scint_modules_geo.geojson')
+
         return merged_df
 
     def order_vertices_clockwise(self, vertices):
@@ -1197,17 +1199,63 @@ class Processing():
         with open(output_file, 'w') as f:
             json.dump(feature_collection, f, indent=4)
 
+
+    def save_scint_mod_geo(self, merged_df, output_file):
+        print("Saving scintillator module geometries to GeoJSON")
+        features_scint_mod_poly = []
+
+        # Iterate over each row in the merged DataFrame
+        for _, row in merged_df.iterrows():
+            ts_ieta = row['ts_ieta']
+            ts_iphi = row['ts_iphi']
+            tc_layer = row['tc_layer']
+            ordered_vertices_list = row['vertices_clockwise']
+            print(ordered_vertices_list)
+
+            # Convert string representation of vertices to list of floats
+            ordered_vertices = [list(map(float, vertex)) for vertex in ordered_vertices_list]
+
+            # Create a Shapely Polygon from the ordered vertices
+            polygon = Polygon(ordered_vertices)
+
+            # Convert Shapely polygon to GeoJSON feature
+            feature_scint_mod_poly = {
+                    'type': 'Feature',
+                    'geometry': mapping(polygon),  # Convert polygon to GeoJSON geometry
+                    'properties': {
+                        'Layer': tc_layer,
+                        'ieta': ts_ieta,
+                        'iphi': ts_iphi,
+                    }
+                }
+            features_scint_mod_poly.append(feature_scint_mod_poly)  # Add feature to the list
+
+        # Create GeoJSON FeatureCollection
+        feature_collection = {
+            'type': 'FeatureCollection',
+            'features': features_scint_mod_poly
+        }
+
+        # Write GeoJSON data to file
+        with open(output_file, 'w') as f:
+            json.dump(feature_collection, f, indent=4)
+
+        print("GeoJSON with scintillator module geometries saved to:", output_file)
+
+
+    def read_geojson_files(self, bins_geojson_file, hexagons_geojson_file, scint_geojson_file):
+        with open(bins_geojson_file, 'r') as f:
+            bins_data = json.load(f)
+        with open(hexagons_geojson_file, 'r') as f:
+            hexagons_data = json.load(f)
+        with open(scint_geojson_file, 'r') as f:
+            scint_data = json.load(f)
+        return bins_data, hexagons_data, scint_data
+
     #SPLITTING
             
     def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename, data_gen):
-        print('Mod sum to towers') 
-
-        #plotMS.plot_bins_from_geojson(bin_geojson_filename, 'plot_layers')
-        #plotMS.plot_bins_and_hexagons_from_geojson(bin_geojson_filename, hex_geojson_filename, 'plot_layers')
-
-        #plotMS.plot_hexagons_from_geojson('/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_CMSSW.geojson', 'plot_layers')
-        
-        #plotMS.plot_hex_bin_overlap_save(hdf5_filename, '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/plot_layers/plot_overlap/')
+        print('Mod sum to towers')
 
         overlap_data = self.read_hdf5_file(hdf5_filename)
 

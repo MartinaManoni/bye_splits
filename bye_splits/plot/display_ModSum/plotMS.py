@@ -25,7 +25,7 @@ from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
 from shapely import geometry as geom
 from shapely.geometry import Polygon, mapping, shape, MultiPolygon
-from shapely.ops import unary_union
+from collections import defaultdict
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -251,42 +251,6 @@ def plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_numb
     plt.grid(True)
     plt.savefig(f"/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/Layer{layer_number}_NEW_MART_2.png", dpi = 400)
 
-def plot_group_positions(final_projected_df):
-    # Define colors for each group
-    group_colors = {
-        'CEE': 'blue',
-        'CEH_odd': 'green',
-        'CEH_even': 'red'
-        #'CEH_odd_2': 'orange',
-       #'CEH_even_2': 'cyan'
-    }
-    # Create a subplot for each group
-    for group, color in group_colors.items():
-        group_df = final_projected_df[final_projected_df['group'] == group]
-        mask = (group_df["ts_wu"] == 0) & (group_df["ts_wv"] == 6)
-        plt.figure(figsize=(8, 6))
-        
-        for hex_x, hex_y in zip(group_df['hex_x'], group_df['hex_y']):
-            plt.plot(hex_x + (hex_x[0],), hex_y + (hex_y[0],), color=color, alpha=0.5)  # Close the loop
-
-        #plt.scatter(group_df['ts_x'], group_df['ts_y'], color=color, s=1)
-        plt.scatter(group_df['wx_center'], group_df['wy_center'], color=color, s=1)
-        plt.title(f"Position of Entries for {group} with Annotations")
-        plt.xlabel('ts_x')
-        plt.ylabel('ts_y')
-        
-        # Annotate each point with ts_wu and ts_wv values
-        for index, row in group_df.iterrows():
-            plt.annotate(f"U:{row['ts_wu']}, V:{row['ts_wv']}", (row['wx_center'], row['wy_center']), fontsize=3)
-            plt.annotate(f"E:{row['ts_mipPt']:.2f}", (row['wx_center'], row['wy_center']-3), fontsize=3, color=color)
-        
-        print(f"DF GROUP {group}",group_df)
-        print(f"lenght {group}", len(group_df))
-        # Save the plot as PNG
-        plt.savefig(f"{group}_positions_pion_NEW.png", dpi=400)
-        plt.close()
-
-
 def plot_layers(df_ts, ds_new):
     #layers = set(df_ts[df_ts['ts_layer'] > 37]['ts_layer'].unique()).intersection(set(ds_new[ds_new['ts_layer'] > 37]['ts_layer'].unique()))
     layers = set(df_ts['ts_layer'].unique()).intersection(set(ds_new['ts_layer'].unique()))
@@ -458,9 +422,6 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     plt.savefig(f'{algo}_{particle}_{event}_{subdet}.png', dpi=500)  # Save the plot as an image
     plt.show()
 
-
-
-
 def plot_hex_bin_overlap_save(hdf5_filename, output_folder):
         with h5py.File(hdf5_filename, 'r') as hf:
             for layer_name in hf.keys():
@@ -513,171 +474,6 @@ def plot_hex_bin_overlap_save(hdf5_filename, output_folder):
                 plt.savefig(output_filename)
                 plt.close()    
 
-
-def plot_bins_from_geojson(geojson_file, output_dir):
-        # Read GeoJSON file
-        with open(geojson_file, 'r') as f:
-            data = json.load(f)
-        
-        # Dictionary to store bins grouped by layer
-        layer_bins = {}
-        
-        # Iterate over each feature in the GeoJSON file
-        for feature in data['features']:
-            layer = feature['properties']['Layer']
-            geometry = shape(feature['geometry'])  # Convert GeoJSON geometry to Shapely geometry
-            
-            # Add the geometry to the corresponding layer
-            if layer not in layer_bins:
-                layer_bins[layer] = [geometry]
-            else:
-                layer_bins[layer].append(geometry)
-        
-        # Plot bins for each layer
-        for layer, bins in layer_bins.items():
-            plt.figure(figsize=(8, 6))
-            for bin_geometry in bins:
-                plt.plot(*bin_geometry.exterior.xy, color='black', linewidth=0.5)
-                plt.gca().set_aspect('equal', adjustable='datalim')
-
-            for i in range(10, 251, 10):  # Start from 10 cm to 250 cm, increment by 10
-                plt.plot([-1, 1], [i, i], color='black', linewidth=0.5)  # Draw ticks between x=-1 and x=1
-
-
-            plt.title(f'Layer {layer} - Towers')
-            plt.xlabel('X Position')
-            plt.ylabel('Y Position')
-            plt.grid(True)
-            
-            # Save the plot as a PNG file
-            output_file = os.path.join(output_dir, f'layer_{layer}_bins_geojson_vertex.png')
-            plt.savefig(output_file)
-            plt.close()                       
-
-
-def plot_hexagons_from_geojson(geojson_file, output_dir):
-        # Read GeoJSON file
-        print("Plotting hexagons form geojson files ...")
-        with open(geojson_file, 'r') as f:
-            data = json.load(f)
-        
-        # Dictionary to store hexagons grouped by layer
-        layer_hexagons = {}
-        
-        # Iterate over each feature in the GeoJSON file
-        for feature in data['features']:
-            layer = feature['properties']['Layer']
-            geometry_coords = feature['geometry']['coordinates'][0]  # Extract coordinates
-            polygon = Polygon(geometry_coords)  # Convert to Shapely polygon
-            wu = feature['properties']['wu']  # Extract wu value
-            wv = feature['properties']['wv']  # Extract wv value
-            
-            # Add the polygon to the corresponding layer
-            # Add the polygon and its wu, wv values to the corresponding layer
-            if layer not in layer_hexagons:
-                layer_hexagons[layer] = [{'polygon': polygon, 'wu': wu, 'wv': wv}]
-            else:
-                layer_hexagons[layer].append({'polygon': polygon, 'wu': wu, 'wv': wv})
-
-        # Plot hexagons for each layer
-        for layer, hexagons in layer_hexagons.items():
-            plt.figure(figsize=(8, 6))
-            for hexagon_info in hexagons:
-                hexagon = hexagon_info['polygon']
-                wu = hexagon_info['wu']
-                wv = hexagon_info['wv']
-                x, y = hexagon.exterior.xy
-                plt.plot(x, y, color='blue')
-
-                # Calculate centroid of the hexagon
-                centroid = hexagon.centroid
-                plt.text(centroid.x, centroid.y, f'{wu},{wv}', ha='center', va='center', fontsize=3, color='black')
-
-            plt.title(f'Layer {layer} - Hexagons')
-            plt.xlabel('X Position')
-            plt.ylabel('Y Position')
-            plt.grid(True)
-            # Save the plot as a PNG file
-            output_file = os.path.join(output_dir, f'layer_{layer}_hexagons_geojson_CMSSW_LATEST.png')
-            plt.savefig(output_file, dpi = 400)
-            plt.close()
-
-
-def plot_bins_and_hexagons_from_geojson(bins_geojson_file, hexagons_geojson_file, output_dir):
-    # Read bins GeoJSON file
-    with open(bins_geojson_file, 'r') as f:
-        bins_data = json.load(f)
-
-    # Read hexagons GeoJSON file
-    with open(hexagons_geojson_file, 'r') as f:
-        hexagons_data = json.load(f)
-
-    # Dictionary to store bins and hexagons grouped by layer
-    layer_data = {}
-
-    # Process bins data
-    for feature in bins_data['features']:
-        layer = feature['properties']['Layer']
-        geometry = shape(feature['geometry'])  # Convert GeoJSON geometry to Shapely geometry
-        eta_vertices = feature['properties']['Eta_vertices']
-
-        if layer not in layer_data:
-            layer_data[layer] = {'bins': [], 'hexagons': []}
-
-        layer_data[layer]['bins'].append({'geometry': geometry, 'eta_vertices': eta_vertices})
-
-    # Process hexagons data
-    for feature in hexagons_data['features']:
-        layer = feature['properties']['Layer']
-        geometry = shape(feature['geometry'])  # Convert GeoJSON geometry to Shapely geometry
-        wu = feature['properties']['wu']  # Extract wu/wv values
-        wv = feature['properties']['wv']
-
-        if layer not in layer_data:
-            layer_data[layer] = {'bins': [], 'hexagons': []}
-
-        layer_data[layer]['hexagons'].append({'geometry': geometry, 'wu': wu, 'wv': wv})
-
-    # Plot bins and hexagons for each layer
-    for layer, data in layer_data.items():
-        plt.figure(figsize=(8, 6))
-
-        # Plot bins
-        for i, bin_info in enumerate(data['bins']):
-            bin_geometry = bin_info['geometry']
-            eta_vertices = bin_info['eta_vertices']
-
-            plt.plot(*bin_geometry.exterior.xy, color='black', linewidth=0.2)
-
-            # Add 'Eta' value for the bottom right corner for the first 20 bins
-            if i < 20:
-                bottom_right_eta = round(eta_vertices[3], 2)
-                bottom_right_x, bottom_right_y = bin_geometry.exterior.coords[3]
-                plt.text(bottom_right_x, bottom_right_y, f'{bottom_right_eta}', ha='center', va='top', fontsize=2, color='black',  rotation=+90)
-
-        # Plot hexagons
-        for hexagon_info in data['hexagons']:
-            hexagon_geometry = hexagon_info['geometry']
-            wu = hexagon_info['wu']
-            wv = hexagon_info['wv']
-
-            x, y = hexagon_geometry.exterior.xy
-            plt.plot(x, y, color='red', linewidth=0.7)
-
-            # Calculate centroid of the hexagon
-            centroid = hexagon_geometry.centroid
-            plt.text(centroid.x, centroid.y, f'{wu},{wv}', ha='center', va='center', fontsize=5, color='red', weight='bold')
-
-        plt.title(f'Layer {layer} - Tower bins and Hexagons')
-        plt.xlabel('X Position')
-        plt.ylabel('Y Position')
-        plt.grid(True)
-
-        # Save the plot as a PNG file
-        output_file = os.path.join(output_dir, f'layer_{layer}_bins_and_hexagons.png')
-        plt.savefig(output_file, dpi=700)
-        plt.close()
-           
 def plot_scint_tiles(df):
     for layer in df['tc_layer'].unique():
         print("layer num", layer)
@@ -713,6 +509,7 @@ def plot_scint_tiles(df):
         plt.title(f'TC Layer {layer}')
         plt.legend()
         plt.grid(True)
+        plt.axis('equal')
 
         # If filename is provided, save the plot as PNG
         output_dir = '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/plot_scint/'
@@ -721,33 +518,53 @@ def plot_scint_tiles(df):
         plt.close()
         print(f"Plot for layer {layer} saved as {output_file}")
 
-def plot_scint_modules(df):
-    # Group the DataFrame by layer
-    grouped_df = df.groupby('tc_layer')
+def plot_full_geom(bins_data, hexagons_data, scint_data, output_dir, plot_type='all'):
+    print("Plotting full geometry")
+    layer_data = defaultdict(lambda: {'bins': [], 'hexagons': [], 'scint_mod': []})
 
-    for layer, layer_df in grouped_df:
-        # Create a new figure for each layer
-        plt.figure()
-        plt.title(f'Scintillator Modules - Layer {layer}')
+    for geojson_data, key in zip([bins_data, hexagons_data, scint_data], ['bins', 'hexagons', 'scint_mod']):
+        for feature in geojson_data['features']:
+            layer = feature['properties']['Layer']
+            geometry = shape(feature['geometry'])
+            properties = feature['properties']
+            layer_data[layer][key].append({'geometry': geometry, **properties})
 
-        # Loop through each row in the layer DataFrame
-        for _, row in layer_df.iterrows():
-            # Extract vertices for the current row
-            vertices = row['vertices_clockwise']
-            x_coords, y_coords = zip(*vertices)
+    for layer, data in layer_data.items():
+        fig, ax = plt.subplots(figsize=(8, 6))
 
-            # Plot the diamond polygon for the current row
-            plt.plot(x_coords + (x_coords[0],), y_coords + (y_coords[0],), linewidth=0.4, color = 'black') #linewidth=0.5 #'bo-'
+        if plot_type == 'all' or plot_type == 'bins':
+            for i, bin_info in enumerate(data['bins']):
+                bin_geometry = bin_info['geometry']
+                eta_vertices = bin_info['Eta_vertices']
+                x, y = bin_geometry.exterior.xy
+                ax.plot(x, y, color='black', linewidth=0.2)
+                if i < 20:
+                    bottom_right_eta = round(eta_vertices[3], 2)
+                    bottom_right_x, bottom_right_y = bin_geometry.exterior.coords[3]
+                    ax.text(bottom_right_x, bottom_right_y, f'{bottom_right_eta}', ha='center', va='top', fontsize=2, color='black',  rotation=+90)
 
-        # Set axis labels
-        plt.xlabel('X')
-        plt.ylabel('Y')
-        # Add grid
-        plt.grid(True)
-        # Set equal scaling on axes
-        plt.axis('equal')
-        # Save the plot
-        output_dir = '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/plot_scint/'
-        output_file = os.path.join(output_dir, f'Layer_{layer}_ScintillatorModules.png')
-        plt.savefig(output_file, dpi=400)
-        plt.close()
+        if plot_type == 'all' or plot_type == 'hexagons':
+            for info in data['hexagons']:
+                geometry = info['geometry']
+                x, y = geometry.exterior.xy
+                ax.plot(x, y, color='red', linewidth=0.7)
+                centroid = geometry.centroid
+                ax.text(centroid.x, centroid.y, f"{info['wu']},{info['wv']}", ha='center', va='center', fontsize=4, color='red')
+
+        if plot_type == 'all' or plot_type == 'scint_mod':
+            for info in data['scint_mod']:
+                geometry = info['geometry']
+                x, y = geometry.exterior.xy
+                ax.plot(x, y, color='blue', linewidth=0.7)
+                centroid = geometry.centroid
+                ax.text(centroid.x, centroid.y, f"{info['ieta']},{info['iphi']}", ha='center', va='center', fontsize=4, color='blue')
+
+        ax.set_title(f'Layer {layer} - Full geometry')
+        ax.set_xlabel('X Position')
+        ax.set_ylabel('Y Position')
+        ax.grid(True)
+        ax.axis('equal')
+
+        output_file = os.path.join(output_dir, f'layer_{layer}_full_geometry_V11_{plot_type}.png')
+        fig.savefig(output_file, dpi=700)
+        plt.close(fig)
