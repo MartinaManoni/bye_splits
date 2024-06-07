@@ -1,7 +1,5 @@
 # coding: utf-8
-# python3 bye_splits/production/produce_mod.py --particles photons --nevents 1000 (with python does not work)
-# skimmed_photons_1k_Tsums_v2.root skim 1000 events at first, ts selections: "ts_zside == 1 && ts_layer <= 28"
-# skimmed_photons_1k_Tsums_v3.root skim 1000 events at first, tc and ts selections: "zside == 1 && layer <= 28" 
+# python3 bye_splits/production/produce_mod.py --particles photons --nevents 1000
 _all_ = []
 
 import os
@@ -115,7 +113,6 @@ def skim(tn, inf, outf, particle, nevents, cfg):
     #dd=dfilt.Display("")
     #dd.Print()  
 
-
     # trigger cells-related variables
     tc_uintv = ["tc_multicluster_id"]
     tc_intv = ["tc_layer", "tc_cellu", "tc_cellv", "tc_waferu", "tc_waferv"]
@@ -124,8 +121,7 @@ def skim(tn, inf, outf, particle, nevents, cfg):
 
 
     # selection on trigger cells (within each event)
-    condtc = "tc_zside == 1 && tc_layer <= 28"
-    #condtc = "tc_zside == 1 && tc_mipPt > " + str(mipThreshold) + " && tc_layer <= 28"
+    condtc = "tc_zside == 1 && tc_mipPt > " + str(mipThreshold)
     dd1 = dfilt.Define("tmp_good_tcs", condtc)
     for v in tc_v:
         dd1 = dd1.Define("tmp_good_" + v, v + "[tmp_good_tcs]")
@@ -136,7 +132,7 @@ def skim(tn, inf, outf, particle, nevents, cfg):
     ts_v = ts_intv + ts_floatv
 
     # selection on trigger sums (within each event)
-    condts = "ts_zside == 1 && ts_layer <= 28"
+    condts = "ts_zside == 1 && ts_mipPt > " + str(mipThreshold)
     dd1 = dd1.Define("tmp_good_ts", condts)
     for v in ts_v:
         dd1 = dd1.Define("tmp_good_" + v, v + "[tmp_good_ts]")  
