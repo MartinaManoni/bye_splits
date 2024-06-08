@@ -986,76 +986,77 @@ class Processing():
         #print("df_baseline", df_baseline)
         return df_baseline
 
-    def area_overlap(self, df_overlap, subdet):
+
+    def area_overlap_by_event(self, df_hexagon_info, subdet):
         print("Area overlap algorithm ...")
+        # Initialize a list to store the results for all events
+        all_event_rows = []
+        # Get unique event indices
+        unique_events = df_hexagon_info.index.get_level_values('event').unique()
 
         start_time = time.time()
 
-        if subdet == 'CEE':
-            print("CEE subdet ...")
-            df_overlap = df_overlap[df_overlap['layer'] < 29]
-        elif subdet == 'CEH':
-            print("CEH subdet ...")
-            df_overlap = df_overlap[df_overlap['layer'] >= 29]
-        else:
-            print("CEE + CEH subdet ...")
-            df_overlap = df_overlap
+        for event in unique_events:
+            print(f"Processing event {event}...")
+            df_event = df_hexagon_info.loc[event]
+            bin_mipPt_by_layer = {}
+            unique_layers = df_event.index.get_level_values('layer').unique()
 
+            if subdet == 'CEE':
+                print("CEE subdet ...")
+                unique_layers = unique_layers[unique_layers < 29]
+            elif subdet == 'CEH':
+                print("CEH subdet ...")
+                unique_layers = unique_layers[unique_layers >= 29]
+            else:
+                print("CEE + CEH subdet ...")
+                unique_layers = unique_layers
 
-        # Group DataFrame by 'layer' column
-        grouped = df_overlap.groupby('layer')
-        
-        # Iterate over each layer group
-        for layer_idx, layer_df in grouped:
-            #print("layer idx", layer_idx)
-            # Iterate over each row of the layer DataFrame
-            for index, row in layer_df.iterrows():
-                # Calculate the number of bins associated with the hexagon
-                num_bins = len(row['bins_overlapping'])
-                #print("num bins", num_bins)
+            for layer_idx in unique_layers:
+                layer_df = df_event.loc[df_event.index.get_level_values('layer') == layer_idx]
 
-                # Update the mipPt value for each bin associated with the hexagon
-                for bin_info in row['bins_overlapping']:
-                    bin_info['mipPt'] = row['ts_mipPt'] * bin_info['percentage_overlap']
-                    #print("hex mip, %, bin mip", row['ts_mipPt']," ", bin_info['percentage_overlap'] ," ", bin_info['mipPt'] )
-        
-        #print("grouped df", grouped)
-        #print("DF OVERLAP ALGO", df_overlap.columns)
-        #print("DF OVERLAP ALGO", df_overlap)
+                bin_mipPt = {}  # Initialize mipPt for bins in the current layer
 
-        flattened_bins = []
+                for hex_row in layer_df.itertuples():
+                    if not hex_row.bins_overlapping: # Skip hexagons with no overlapping bins
+                        continue
 
-        # Iterate over each row of the DataFrame
-        for index, row in df_overlap.iterrows():
-            # Iterate over each bin in the 'bins_overlapping' column
-            for bin_info in row['bins_overlapping']:
-                # Extract eta and phi vertices
-                eta_vertices = bin_info['eta_vertices']
-                phi_vertices = bin_info['phi_vertices']
-                mipPt = bin_info['mipPt']
-                
-                # Append to flattened_bins list
-                flattened_bins.append({'eta_vertices': eta_vertices, 'phi_vertices': phi_vertices, 'mipPt': mipPt})
+                    for bin_info in hex_row.bins_overlapping:
+                        bin_info['mipPt'] = hex_row.ts_mipPt * bin_info['percentage_overlap']
+                        bin_key = (tuple(bin_info['eta_vertices']), tuple(bin_info['phi_vertices']))
 
-        # Convert the list of dictionaries to a DataFrame
-        flattened_bins_df = pd.DataFrame(flattened_bins)
-        # Convert arrays to tuples
+                        if bin_key not in bin_mipPt:
+                            bin_mipPt[bin_key] = 0
 
-        flattened_bins_df['eta_vertices'] = flattened_bins_df['eta_vertices'].apply(tuple)
-        flattened_bins_df['phi_vertices'] = flattened_bins_df['phi_vertices'].apply(tuple)
+                        bin_mipPt[bin_key] += bin_info['mipPt']
 
-        df_over_final = flattened_bins_df.groupby(['eta_vertices', 'phi_vertices']).agg({'mipPt': 'sum'}).reset_index()
+                    bin_mipPt_by_layer[layer_idx] = bin_mipPt    
 
-        print("flattened bins", flattened_bins_df)   
-        print("final bins", df_over_final)  
+            # Convert the bin_mipPt_by_layer dictionary into a list of dictionaries
+            event_rows = []
 
-        total_mipPt = df_over_final['mipPt'].sum()
-        print("Total mipPt sum:", total_mipPt)
+            for layer_idx, mipPt_dict in bin_mipPt_by_layer.items():
+                for bin_key, mipPt in mipPt_dict.items():
+                    row = {
+                        'event': event,
+                        'layer': layer_idx,
+                        'eta_vertices': bin_key[0],
+                        'phi_vertices': bin_key[1],
+                        'mipPt': mipPt
+                    }
+                    event_rows.append(row)
+
+            all_event_rows.extend(event_rows)
 
         end_time = time.time()
-        print("Execution time loop - area overlap not opt", end_time-start_time)
+        print("Execution time loop - area overlap by event", end_time - start_time)
 
-        return df_over_final
+        # Convert the list of dictionaries to a DataFrame
+        df_2 = pd.DataFrame(all_event_rows, columns=['event', 'layer', 'eta_vertices', 'phi_vertices', 'mipPt'])
+
+        # Group by eta_vertices and phi_vertices and sum the mipPt
+        df_2 = df_2.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'mipPt': 'sum'}).reset_index()
+        return df_2
 
     def area_overlap_8Towers(self, df_hexagon_info, subdet):
         print("Algoirthm 1/8s towers ...")
@@ -1527,19 +1528,10 @@ class Processing():
 
         if algo == 'baseline':
 
-            df_baseline = self.baseline_by_event(hexagon_info_df, subdet)
+            df_algo = self.baseline_by_event(hexagon_info_df, subdet)
 
-            df , df_sum = self.apply_update_to_each_event(df_baseline, bins_df)
-
-            df_resolution = self.eval_eta_phi_photon_resolution(df, data_gen, window_size=12, subwindow_size=3)
-
-            plotMS.plot_eta_phi_resolution(df_resolution)
-            self.save_eta_phi_differences(df_resolution, 'eta_phi_diff_data_baseline.txt')
-            
-        
         elif algo == 'area_overlap':
-            df = self.area_overlap(overlap_data, subdet) #not working at this point 
-            #df= self.area_overlap_opt(overlap_data)
+            df_algo = self.area_overlap_by_event(hexagon_info_df, subdet)
 
         elif algo == '8towers':
             df = self.area_overlap_8Towers(overlap_data, subdet) #not working at this point 
@@ -1547,6 +1539,12 @@ class Processing():
         else:
             raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap' or '8towers'.")
 
+        df , df_sum = self.apply_update_to_each_event(df_algo, bins_df)
+
+        df_resolution = self.eval_eta_phi_photon_resolution(df, data_gen, window_size=12, subwindow_size=3)
+        plotMS.plot_eta_phi_resolution(df_resolution)
+
+        self.save_eta_phi_differences(df_resolution, 'eta_phi_diff_data_baseline.txt')
         plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet)
 
 
