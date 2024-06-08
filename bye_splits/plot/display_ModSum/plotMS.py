@@ -18,6 +18,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import plotly.io as pio
 from scipy.spatial.distance import cdist
+from scipy.stats import norm
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon as PolygonPlt
@@ -376,7 +377,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
             poly = PolygonPlt(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')#, closed=True
             color = ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap='viridis').to_rgba(0)
             poly.set_facecolor(color)
-            ax.add_patch(poly)
+            #ax.add_patch(poly)
 
     # Normalize total mipPt values for color mapping
     max_mipPt = df_baseline_proj['mipPt'].max()
@@ -399,11 +400,11 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
         text_y = np.mean(phi_vertices)
         ax.text(text_x, text_y, f'{mipPt:.1f}', color='black', ha='center', va='center', fontsize=5)
 
-    if event != '-1':
+    #if event != '-1':
         # Overlay gen_eta and gen_phi points
-        print('gen_eta', data_gen['gen_eta'])
-        print('gen_phi', data_gen['gen_phi'])
-        print('gen_eta', data_gen['gen_pt'])
+        #print('gen_eta', data_gen['gen_eta'])
+        #print('gen_phi', data_gen['gen_phi'])
+        #print('gen_eta', data_gen['gen_pt'])
         ax.scatter(data_gen['gen_eta'], data_gen['gen_phi'], marker='x', color='red', label='Gen Points')
 
     # Add color bar
@@ -419,7 +420,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     ax.set_title(f'{algo}_{particle}_{event}')
 
     ax.autoscale()
-    plt.savefig(f'{algo}_{particle}_{event}_{subdet}.png', dpi=500)  # Save the plot as an image
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_SUMMED_NEW.png', dpi=500)  # Save the plot as an image
     plt.show()
 
 def plot_hex_bin_overlap_save(hdf5_filename, output_folder):
@@ -568,3 +569,71 @@ def plot_full_geom(bins_data, hexagons_data, scint_data, output_dir, plot_type='
         output_file = os.path.join(output_dir, f'layer_{layer}_full_geometry_V11_{plot_type}.png')
         fig.savefig(output_file, dpi=700)
         plt.close(fig)
+
+def plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max, eta_start, eta_end, phi_start, phi_end):
+    # Create a figure and axis
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Plot the 12x12 window
+    for idx, row in window_bins.iterrows():
+        polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='black', facecolor='none')
+        ax.add_patch(polygon)
+
+    # Highlight the 3x3 subwindow
+    subwindow_bins = window_bins[
+        (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] < eta_end) &
+        (window_bins['phi_center'] >= phi_start) & (window_bins['phi_center'] < phi_end)
+    ]
+
+    for idx, row in subwindow_bins.iterrows():
+        polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='red', facecolor='none')
+        ax.add_patch(polygon)
+
+    # Display the plot
+    plt.xlim(eta_min, eta_max)
+    plt.ylim(phi_min, phi_max)
+    plt.xlabel('Eta')
+    plt.ylabel('Phi')
+    plt.title(f'3x3 Subwindow from ({eta_start}, {phi_start}) to ({eta_end}, {phi_end})')
+    plt.show()
+
+def plot_eta_phi_resolution(results_df):
+    """
+    Plot histograms of eta and phi differences for each event with Gaussian fits.
+    
+    Parameters:
+    - results_df: DataFrame containing 'eta_diff' and 'phi_diff' columns for each event.
+    """
+    eta_diffs = results_df['eta_diff']
+    phi_diffs = results_df['phi_diff']
+
+    # Plot histogram for eta differences
+    plt.figure(figsize=(12, 6))
+
+    plt.subplot(1, 2, 1)
+    n, bins, patches = plt.hist(eta_diffs, bins=10, color='blue', alpha=0.4, density=True)
+    mu_eta, std_eta = norm.fit(eta_diffs)
+    xmin, xmax = plt.xlim()
+    x = np.linspace(xmin, xmax, 100)
+    p = norm.pdf(x, mu_eta, std_eta)
+    plt.plot(x, p, 'k', linewidth=2)
+    plt.xlabel('Eta Difference')
+    plt.ylabel('Frequency')
+    plt.title(f'Histogram of Eta Differences\n mu={mu_eta:.2f}, sigma={std_eta:.2f}')
+    #plt.savefig('eta_diff_histogram.png')
+
+    # Plot histogram for phi differences
+    plt.subplot(1, 2, 2)
+    n, bins, patches = plt.hist(phi_diffs, bins=10, color='green', alpha=0.4, density=True)
+    mu_phi, std_phi = norm.fit(phi_diffs)
+    xmin, xmax = plt.xlim()
+    x = np.linspace(xmin, xmax, 100)
+    p = norm.pdf(x, mu_phi, std_phi)
+    plt.plot(x, p, 'k', linewidth=2)
+    plt.xlabel('Phi Difference')
+    plt.ylabel('Frequency')
+    plt.title(f'Histogram of Phi Differences\n mu={mu_phi:.2f}, sigma={std_phi:.2f}')
+    plt.savefig('eta_phi_diff_histogram_CEH_event_4875.png')
+
+    plt.tight_layout()
+    plt.show()

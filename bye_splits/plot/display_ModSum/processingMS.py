@@ -17,6 +17,8 @@ import random
 import logging
 import time
 import multiprocessing
+from shapely.strtree import STRtree
+
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +35,9 @@ from shapely.geometry import Polygon, mapping, shape, MultiPolygon, Point
 from shapely.ops import unary_union
 from matplotlib.patches import Polygon as matPoly
 from matplotlib.collections import PatchCollection
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import cpu_count
+
 
 
 
@@ -90,6 +95,7 @@ class Processing():
                     column_names = [str(col) for col in dataset.attrs['columns']]
                     # Convert the dataset to a Pandas DataFrame with proper column names
                     df_ts = pd.DataFrame(dataset[:], columns=column_names)
+                    df_ts['event'] = int(event)
                     silicon_df_proc= self.process_event(df_ts)
                         
                     return silicon_df_proc   
@@ -122,7 +128,7 @@ class Processing():
         print("tc data dataframe", combined_tc_df.columns)
         
         # Process the combined ts DataFrame
-        processed_combined_ts_df = self.process_event(combined_ts_df,combined_tc_df) #FIXME - Temporary adding tc data
+        processed_combined_ts_df = self.process_event(combined_ts_df) #FIXME - Temporary adding tc data (combined_ts_df,combined_tc_df)
         return processed_combined_ts_df
     
     def read_hdf5_structure(self,file_path, group_name='df', indent=0):
@@ -153,7 +159,7 @@ class Processing():
                 print("Error: Group '{}' not found in HDF5 file.".format(group_name))
 
 
-    def get_genpart_data(self, file_path, block0_value, group_name='df'):
+    '''def get_genpart_data(self, file_path, block0_value, group_name='df'):
 
         block1_data = []
         print(block0_value)
@@ -163,7 +169,7 @@ class Processing():
                 group = f[group_name]
                 if 'block1_items' in group and 'block1_values' in group:
                     block0_values = group['block0_values'][:, 0]
-                    #print(" block0_values - events", block0_values)
+                    print(" block0_values - events", block0_values)
                     block1_items = [item.decode() for item in group['block1_items']]
                     block1_values = group['block1_values']
                     if block0_value == '-1':
@@ -181,7 +187,42 @@ class Processing():
                 else:
                     print("Error: 'block0_values', 'block1_items', or 'block1_values' not found in group {}.".format(group_name))
             else:
+                print("Error: Group '{}' not found in HDF5 file.".format(group_name))'''
+    
+    def get_genpart_data(self, file_path, block0_value, group_name='df'):
+        block1_data = []
+        events = []
+        print(block0_value)
+
+        with h5py.File(file_path, 'r') as f:
+            if group_name in f:
+                group = f[group_name]
+                if 'block1_items' in group and 'block1_values' in group:
+                    block0_values = group['block0_values'][:, 0]
+                    print(" block0_values - events", block0_values)
+                    block1_items = [item.decode() for item in group['block1_items']]
+                    block1_values = group['block1_values']
+                    if block0_value == '-1':
+                        for idx, value in enumerate(block0_values):
+                            block1_data.append(block1_values[idx])
+                            events.append(value)
+                    elif int(block0_value) in block0_values:
+                        idx = block0_values.tolist().index(int(block0_value))
+                        block1_data.append(block1_values[idx])
+                        events.append(block0_value)
+                    else:
+                        print(f"Block0 value '{block0_value}' not found.")
+
+                    # Create DataFrame and include event numbers as a column
+                    df = pd.DataFrame(block1_data, columns=block1_items)
+                    df['event'] = events
+
+                    return df
+                else:
+                    print("Error: 'block0_values', 'block1_items', or 'block1_values' not found in group {}.".format(group_name))
+            else:
                 print("Error: Group '{}' not found in HDF5 file.".format(group_name))
+
 
     def store_event(self, path, data):
         if isinstance(data, dict):
@@ -193,10 +234,11 @@ class Processing():
         else:
             data.to_hdf(self.filename, path)
 
-    def process_event(self, df_ts, df_tc):
+    def process_event(self, df_ts):
+        #(self, df_ts, df_tc)
         print("Process events ...")
         print("Filled data ts columns", df_ts.columns)
-        print("DATA tc columns", df_tc.columns)
+        #print("DATA tc columns", df_tc.columns)
 
         ts_keep = {'waferu'       : 'ts_wu',
                    'waferv'       : 'ts_wv',
@@ -239,8 +281,8 @@ class Processing():
         #plotMS.plot_scint_tiles(self.ds_geom['sci'])
         print("Scintillator geometry", scint_mod_geom.columns)
 
-        scintillator_df = pd.merge(left=df_tc, right=self.ds_geom['sci'], how='inner', #FIXME
-                                           on=['tc_layer', 'tc_wu', 'tc_cu', 'tc_cv'])
+        '''scintillator_df = pd.merge(left=df_tc, right=self.ds_geom['sci'], how='inner', #FIXME
+                                           on=['tc_layer', 'tc_wu', 'tc_cu', 'tc_cv'])'''
 
         print("shifted_hex_df")
         print(shifted_hex_df[['hex_x', 'hex_y']])
@@ -501,7 +543,143 @@ class Processing():
         arc_points = np.column_stack([x, y])
         arc_line = geom.LineString(arc_points)
         return arc_line
+    
 
+    def process_layer(self, layer_name, data_layer, bins_layer, cart2sph):
+        # Create spatial index for bins
+        bin_polygons = [Polygon(bin_feature['geometry']['coordinates'][0]) for bin_feature in bins_layer]
+        #print("bin_polygons", bin_polygons)
+        str_tree = STRtree(bin_polygons)
+
+        results = []
+
+        for hex_row in data_layer.itertuples():
+            hex_x = hex_row.hex_x
+            hex_y = hex_row.hex_y
+
+            ts_x = hex_row.ts_x  # CMSSW correct modules position
+            ts_y = hex_row.ts_y
+            ts_z = round(hex_row.ts_z, 2)
+
+            wx_center = hex_row.wx_center  # byesplit modules position
+            wy_center = hex_row.wy_center
+
+            ts_mipPt = hex_row.ts_mipPt
+
+            hex_polygon = Polygon(zip(hex_x, hex_y))
+            #print("hex_polygon", hex_polygon)
+
+            hex_centroid = hex_polygon.centroid
+            hex_centroid_x = hex_centroid.x
+            hex_centroid_y = hex_centroid.y
+
+            hex_eta_centroid, hex_phi_centroid = cart2sph(hex_centroid_x, hex_centroid_y, z=ts_z)
+
+            bins_overlapping = []
+
+            # Query spatial index for potential overlapping bins
+            possible_bins = str_tree.query(hex_polygon)
+            possible_bins_polygons = str_tree.geometries.take(possible_bins)
+            #print("possible bins", possible_bins, possible_bins_polygons)
+
+            for bin_polygon in possible_bins_polygons:
+                overlap_area = hex_polygon.intersection(bin_polygon).area
+                percentage_overlap = overlap_area / hex_polygon.area if overlap_area > 0 else 0
+
+                if percentage_overlap > 0:
+                    bin_index = bin_polygons.index(bin_polygon)
+                    bin_feature = bins_layer[bin_index]
+                    
+                    x_vertices = np.array([point[0] for point in bin_feature['geometry']['coordinates'][0]])
+                    y_vertices = np.array([point[1] for point in bin_feature['geometry']['coordinates'][0]])
+                    eta_vertices = np.array(bin_feature['properties'].get('Eta_vertices'))
+                    phi_vertices = np.array(bin_feature['properties'].get('Phi_vertices'))
+                    centroid_eta = np.mean(eta_vertices)
+                    centroid_phi = np.mean(phi_vertices)
+
+                    bins_overlapping.append({
+                        'x_vertices': x_vertices,
+                        'y_vertices': y_vertices,
+                        'eta_vertices': eta_vertices,
+                        'phi_vertices': phi_vertices,
+                        'centroid_eta': centroid_eta,
+                        'centroid_phi': centroid_phi,
+                        'percentage_overlap': percentage_overlap
+                    })
+
+            results.append({
+                'hex_x': hex_x,
+                'hex_y': hex_y,
+                'hex_x_centroid': hex_centroid_x,
+                'hex_y_centroid': hex_centroid_y,
+                'hex_eta_centroid': hex_eta_centroid,
+                'hex_phi_centroid': hex_phi_centroid,
+                'ts_mipPt': ts_mipPt,
+                'layer': layer_name,
+                'bins_overlapping': bins_overlapping
+            })
+        return results
+
+    def eval_hex_bin_overlap_new(self, data, df_bin, hdf5_filename):
+        num_cores = multiprocessing.cpu_count()
+        print("Evaluating overlap between hexagons and towers bins layer by layer")
+        hexagon_info = []  # list of dictionaries
+        
+        # Load GeoJSON file containing bin polygons
+        with open(df_bin) as f:
+            bin_geojson = json.load(f)
+        
+        # Extract bin features
+        bin_features = bin_geojson['features']
+        
+        # Get unique layer names from bin features
+        layer_names = set(bin_feature['properties']['Layer'] for bin_feature in bin_features)
+
+        start_time = time.time()
+
+        # Prepare the arguments for parallel processing
+        args = []
+        for layer_name in layer_names:
+            data_layer = data[data['ts_layer'] == layer_name]
+            bins_layer = [bin_feature for bin_feature in bin_features if bin_feature['properties']['Layer'] == layer_name]
+            args.append((layer_name, data_layer, bins_layer, self.cart2sph))
+
+        with multiprocessing.Pool(num_cores) as pool:
+            hexagon_info_lists = pool.starmap(self.process_layer, args)
+        
+        hexagon_info = [item for sublist in hexagon_info_lists for item in sublist]
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print("Execution time loop: {:.5f} seconds".format(execution_time))
+
+        start_time1 = time.time()
+        with h5py.File(hdf5_filename, 'w') as hf:
+            for layer_idx, hex_info in enumerate(hexagon_info):
+                layer_group = hf.require_group(f'layer_{hex_info["layer"]}')
+                hex_group = layer_group.create_group(f'hex_{layer_idx}')
+                hex_group.create_dataset('hex_x', data=hex_info['hex_x'])
+                hex_group.create_dataset('hex_y', data=hex_info['hex_y'])
+                hex_group.create_dataset('hex_x_centroid', data=hex_info['hex_x_centroid'])
+                hex_group.create_dataset('hex_y_centroid', data=hex_info['hex_y_centroid'])
+                hex_group.create_dataset('hex_eta_centroid', data=hex_info['hex_eta_centroid'])
+                hex_group.create_dataset('hex_phi_centroid', data=hex_info['hex_phi_centroid'])
+                hex_group.create_dataset('ts_mipPt', data=hex_info['ts_mipPt'])
+                for idx, bin_info in enumerate(hex_info['bins_overlapping']):
+                    bin_group = hex_group.create_group(f'bin_{idx}')
+                    bin_group.create_dataset('x_vertices', data=bin_info['x_vertices'])
+                    bin_group.create_dataset('y_vertices', data=bin_info['y_vertices'])
+                    bin_group.create_dataset('eta_vertices', data=bin_info['eta_vertices'])
+                    bin_group.create_dataset('phi_vertices', data=bin_info['phi_vertices'])
+                    bin_group.create_dataset('centroid_eta', data=bin_info['centroid_eta'])
+                    bin_group.create_dataset('centroid_phi', data=bin_info['centroid_phi'])
+                    bin_group.create_dataset('percentage_overlap', data=bin_info['percentage_overlap'])
+        
+        end_time1 = time.time()
+        execution_time1 = end_time1 - start_time1
+        print("Execution time save hdf5: {:.5f} seconds".format(execution_time1)) 
+        
+        return hexagon_info
 
     def eval_hex_bin_overlap(self, data, df_bin, hdf5_filename):
         num_cores = multiprocessing.cpu_count()
@@ -520,7 +698,7 @@ class Processing():
         # Get unique layer names from bin features
         layer_names = set(bin_feature['properties']['Layer'] for bin_feature in bin_features)
 
-        start_time = time.time()
+       
         # Iterate over each layer
         for layer_name in layer_names:
             # Filter hexagons and bins belonging to the current layer
@@ -557,13 +735,15 @@ class Processing():
                     bin_polygon = Polygon(bin_feature['geometry']['coordinates'][0])
                     
                     # Calculate overlap area between hexagon and bin
+                    
                     overlap_area = hex_polygon.intersection(bin_polygon).area
-                  
+
                     #Execution time: 0.00003 seconds
                     percentage_overlap = overlap_area / hex_polygon.area if overlap_area > 0 else 0
-                    
+
                     # If there is an overlap, store the information
-                    if percentage_overlap > 0:
+                    start_time = time.time()
+                    if percentage_overlap >= 0:
                         # Extract bin vertices
                         '''x_vertices = [point[0] for point in bin_feature['geometry']['coordinates'][0]]
                         y_vertices = [point[1] for point in bin_feature['geometry']['coordinates'][0]]
@@ -689,104 +869,122 @@ class Processing():
     
     #ALGORITHMS
 
-    def baseline(self, df_hexagon_info, subdet):
-        print("Baseline algorithm ...")
+    def baseline_by_event(self, df_hexagon_info, subdet):
+        print("Baseline OKAY algorithm ...")
         start_time = time.time()
         
-        # Initialize a dictionary to store the summed mipPt for each bin by layer
-        bin_mipPt_by_layer = {}
+        # Initialize a list to store the results for all events
+        all_event_rows = []
 
-        # Convert DataFrame to numpy array for faster computation
-        hexagon_info_array = df_hexagon_info.to_numpy()
+        # Get unique event indices
+        unique_events = df_hexagon_info.index.get_level_values('event').unique()
 
-        # Get unique layer indices
-        unique_layers = np.unique(hexagon_info_array[:, 0])
+        # Iterate over each event
+        for event in unique_events:
+            print(f"Processing event {event}...")
+            
+            # Extract the DataFrame for the current event
+            df_event = df_hexagon_info.loc[event]
 
-        # Filter layers if required
-        if subdet == 'CEE':
-            print("CEE subdet ...")
-            unique_layers = unique_layers[unique_layers < 29]
-        elif subdet == 'CEH':
-            print("CEH subdet ...")
-            unique_layers = unique_layers[unique_layers >= 29]
-        else:
-            # No layer selection
-            print("CEE + CEH ...")
-            unique_layers = unique_layers
+            # Initialize a dictionary to store the summed mipPt for each bin by layer for the current event
+            bin_mipPt_by_layer = {}
 
-        # Iterate over each layer
-        for layer_idx in unique_layers:
-            layer_df = hexagon_info_array[hexagon_info_array[:, 0] == layer_idx]
+            # Convert event DataFrame to numpy array for faster computation
+            #hexagon_info_array = df_event.to_numpy()
+            # Get unique layer indices for the current event
+            unique_layers = df_event.index.get_level_values('layer').unique()
+            #unique_layers = np.unique(hexagon_info_array[:, 0])
+            #print("unique_layers", unique_layers)
 
-            bin_mipPt = {}  # Initialize mipPt for bins in the current layer
+            #unique_layers = np.array(unique_layers)
 
-            # Iterate over each hexagon in the layer
-            for hex_row in layer_df:
-                if not hex_row[8]:  # Skip hexagons with no overlapping bins
-                    continue
+            # Filter layers if required
+            if subdet == 'CEE':
+                print("CEE subdet ...")
+                unique_layers = unique_layers[unique_layers < 29]
+            elif subdet == 'CEH':
+                print("CEH subdet ...")
+                unique_layers = unique_layers[unique_layers >= 29]
+            else:
+                # No layer selection
+                print("CEE + CEH ...")
+                unique_layers = unique_layers
 
-                # Prepare array of hexagon eta/phi centroids
-                hex_centroid = np.array([hex_row[5], hex_row[6]])
+            # Iterate over each layer for the current event
+            for layer_idx in unique_layers:
+                layer_df = df_event.loc[df_event.index.get_level_values('layer') == layer_idx]
+                #print("layer_df", layer_df )
 
-                # Prepare array of bin eta/phi centroids and mipPt
-                bin_centroids = []
-                bin_mipPts = []
+                bin_mipPt = {}  # Initialize mipPt for bins in the current layer
 
-                for bin_info in hex_row[8]:
-                    bin_eta_centroid = bin_info['centroid_eta']
-                    #print("bin_eta_centroid",bin_eta_centroid)
-                    bin_phi_centroid = bin_info['centroid_phi']
-                    bin_centroid = np.array([bin_eta_centroid, bin_phi_centroid])
-                    bin_centroids.append(bin_centroid)
+                # Iterate over each hexagon in the layer
+                for hex_row in layer_df.itertuples():
+                    if not hex_row.bins_overlapping: # Skip hexagons with no overlapping bins
+                        continue
 
-                    # Directly use the mipPt of the hexagon for the nearest bin
-                    bin_mipPts.append(hex_row[7])
+                    # Prepare array of hexagon eta/phi centroids
+                    # Prepare array of hexagon eta/phi centroids
+                    hex_centroid = np.array([hex_row.hex_eta_centroid, hex_row.hex_phi_centroid])
 
-                bin_centroids = np.array(bin_centroids)
+                    # Prepare array of bin eta/phi centroids and mipPt
+                    bin_centroids = []
+                    bin_mipPts = []
 
-                # Compute pairwise distances between hexagon and bins
-                distances = np.linalg.norm(bin_centroids - hex_centroid, axis=1)
+                    for bin_info in hex_row.bins_overlapping:
+                        bin_eta_centroid = bin_info['centroid_eta']
+                        bin_phi_centroid = bin_info['centroid_phi']
+                        bin_centroid = np.array([bin_eta_centroid, bin_phi_centroid])
+                        bin_centroids.append(bin_centroid)
 
-                # Find the nearest bin for the current hexagon
-                nearest_bin_idx = np.argmin(distances)
+                        # Directly use the mipPt of the hexagon for the nearest bin
+                        bin_mipPts.append(hex_row.ts_mipPt)
 
-                # Assign mipPt of hexagons to the nearest bins
-                nearest_bin_info = hex_row[8][nearest_bin_idx]
-                bin_key = (tuple(nearest_bin_info['eta_vertices']), tuple(nearest_bin_info['phi_vertices']))
+                    bin_centroids = np.array(bin_centroids)
 
-                if bin_key not in bin_mipPt:
-                    bin_mipPt[bin_key] = 0
+                    # Compute pairwise distances between hexagon and bins
+                    distances = np.linalg.norm(bin_centroids - hex_centroid, axis=1)
 
-                bin_mipPt[bin_key] += bin_mipPts[nearest_bin_idx]
+                    # Find the nearest bin for the current hexagon
+                    nearest_bin_idx = np.argmin(distances)
 
-            bin_mipPt_by_layer[layer_idx] = bin_mipPt
+                    # Assign mipPt of hexagons to the nearest bins
+                    nearest_bin_info = hex_row.bins_overlapping[nearest_bin_idx]
+                    bin_key = (tuple(nearest_bin_info['eta_vertices']), tuple(nearest_bin_info['phi_vertices']))
 
-        # Convert the bin_mipPt_by_layer dictionary into a list of dictionaries
-        rows = []
+                    if bin_key not in bin_mipPt:
+                        bin_mipPt[bin_key] = 0
 
-        for layer_idx, mipPt_dict in bin_mipPt_by_layer.items():
-            for bin_key, mipPt in mipPt_dict.items():
-                row = {
-                    'layer': layer_idx,
-                    'eta_vertices': bin_key[0],
-                    'phi_vertices': bin_key[1],
-                    'mipPt': mipPt
-                }
-                rows.append(row)
+                    bin_mipPt[bin_key] += bin_mipPts[nearest_bin_idx]
+
+                bin_mipPt_by_layer[layer_idx] = bin_mipPt
+
+            # Convert the bin_mipPt_by_layer dictionary into a list of dictionaries
+            event_rows = []
+
+            for layer_idx, mipPt_dict in bin_mipPt_by_layer.items():
+                for bin_key, mipPt in mipPt_dict.items():
+                    row = {
+                        'event': event,
+                        'layer': layer_idx,
+                        'eta_vertices': bin_key[0],
+                        'phi_vertices': bin_key[1],
+                        'mipPt': mipPt
+                    }
+                    event_rows.append(row)
+
+            all_event_rows.extend(event_rows)
 
         end_time = time.time()
-        print("Execution time loop - baseline", end_time-start_time)
+        print("Execution time loop - baseline", end_time - start_time)
 
-        # Convert the list of dictionaries to a numpy array
-        df_baseline = np.array([(row['layer'], row['eta_vertices'], row['phi_vertices'], row['mipPt']) for row in rows],
-                            dtype=[('layer', int), ('eta_vertices', object), ('phi_vertices', object), ('mipPt', float)])
+        # Convert the list of dictionaries to a DataFrame
+        df_baseline = pd.DataFrame(all_event_rows, columns=['event', 'layer', 'eta_vertices', 'phi_vertices', 'mipPt'])
 
-        df_baseline = pd.DataFrame(df_baseline, columns=['layer', 'eta_vertices', 'phi_vertices', 'mipPt'])
-        df_baseline = df_baseline.groupby(['eta_vertices', 'phi_vertices']).agg({'mipPt': 'sum'}).reset_index()
+        # Group by eta_vertices and phi_vertices and sum the mipPt
+        df_baseline = df_baseline.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'mipPt': 'sum'}).reset_index()
 
-        print("df_baseline", df_baseline)
+        #print("df_baseline", df_baseline)
         return df_baseline
-    
 
     def area_overlap(self, df_overlap, subdet):
         print("Area overlap algorithm ...")
@@ -1242,7 +1440,6 @@ class Processing():
 
         print("GeoJSON with scintillator module geometries saved to:", output_file)
 
-
     def read_geojson_files(self, bins_geojson_file, hexagons_geojson_file, scint_geojson_file):
         with open(bins_geojson_file, 'r') as f:
             bins_data = json.load(f)
@@ -1252,24 +1449,350 @@ class Processing():
             scint_data = json.load(f)
         return bins_data, hexagons_data, scint_data
 
+    def update_bins(self, baseline_df, bins_df):
+        # Filter the bins from the first layer
+        first_layer_bins = bins_df[bins_df['Layer'] == 1]
+        all_bins = []
+
+        for _, row in first_layer_bins.iterrows():
+            for bin_info in row['Bins']:
+                eta_vertices = tuple(bin_info['Eta_Vertices'])
+                phi_vertices = tuple(bin_info['Phi_Vertices'])
+                all_bins.append((eta_vertices, phi_vertices))
+
+        all_bins_df = pd.DataFrame(all_bins, columns=['eta_vertices', 'phi_vertices'])
+
+        # Merge baseline_df with all_bins_df to find bins that are missing in baseline_df
+        merged_df = all_bins_df.merge(baseline_df, how='left', on=['eta_vertices', 'phi_vertices'])
+
+        # Fill NaN mipPt values with 0 for bins that are not in baseline_df
+        merged_df['mipPt'] = merged_df['mipPt'].fillna(0)
+
+        # No need to group by layer since we're only interested in the first layer bins
+        final_df = merged_df
+
+        print("Final df_baseline", final_df)
+        return final_df
+
+    def apply_update_to_each_event(self, df, bins_df):
+        all_event_dfs = []
+
+        unique_events = df['event'].unique()
+
+        for event in unique_events:
+            #print(f"Processing event {event}...")
+            
+            # Extract the DataFrame for the current event
+            event_df = df[df['event'] == event]
+
+            #Add bins that have 0 overlap with the hexagons with mipPt 0
+            updated_event_df = self.update_bins(event_df, bins_df)
+
+            # Add the event column back
+            updated_event_df['event'] = event
+            
+            all_event_dfs.append(updated_event_df)
+
+        # Concatenate all the event DataFrames together
+        final_df = pd.concat(all_event_dfs, ignore_index=True)
+        #print("SUPER FINAL", final_df)
+
+        # Group by eta_vertices and phi_vertices and sum the mipPt
+        summed_df = final_df.groupby(['eta_vertices', 'phi_vertices']).agg({'mipPt': 'sum'}).reset_index()
+        #print("SUMMED FINAL", summed_df)
+
+        return final_df, summed_df
+
+    def save_eta_phi_differences(self, results_df, filename):
+        eta_diffs = results_df['eta_diff']
+        phi_diffs = results_df['phi_diff']
+        
+        with open(filename, 'w') as file:
+            file.write("eta_diff,phi_diff\n")
+            for eta_diff, phi_diff in zip(eta_diffs, phi_diffs):
+                file.write(f"{eta_diff},{phi_diff}\n")
+
     #SPLITTING
             
-    def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename, data_gen):
+    def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename, data_gen, bins_df):
         print('Mod sum to towers')
 
-        overlap_data = self.read_hdf5_file(hdf5_filename)
+        #overlap_data = self.read_hdf5_file(hdf5_filename)
+        #print("OVERLAP DATA INPUT ", overlap_data)
+        #print("OVERLAP DATA INPUT columns ", overlap_data.columns)
+
+        hexagon_info_df = self.eval_hex_bin_overlap_OK(data, bin_geojson_filename)
+        print("QUIIIIII, hexagon_info_df", hexagon_info_df)
+        print("QUIIIIII, hexagon_info_df COLUMNS", hexagon_info_df.columns)
 
         if algo == 'baseline':
-            df = self.baseline(overlap_data, subdet)
+
+            df_baseline = self.baseline_by_event(hexagon_info_df, subdet)
+
+            df , df_sum = self.apply_update_to_each_event(df_baseline, bins_df)
+
+            df_resolution = self.eval_eta_phi_photon_resolution(df, data_gen, window_size=12, subwindow_size=3)
+
+            plotMS.plot_eta_phi_resolution(df_resolution)
+            self.save_eta_phi_differences(df_resolution, 'eta_phi_diff_data_baseline.txt')
+            
         
         elif algo == 'area_overlap':
-            df = self.area_overlap(overlap_data, subdet)
+            df = self.area_overlap(overlap_data, subdet) #not working at this point 
             #df= self.area_overlap_opt(overlap_data)
 
         elif algo == '8towers':
-            df = self.area_overlap_8Towers(overlap_data, subdet)
+            df = self.area_overlap_8Towers(overlap_data, subdet) #not working at this point 
         
         else:
             raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap' or '8towers'.")
 
-        plotMS.plot_towers_eta_phi_grid(df, data_gen, algo, event, particle, subdet)
+        plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet)
+
+
+    def compute_overlap(self, hex_row, bins_layer):
+        start_time = time.time()
+        hex_x = hex_row.hex_x
+        hex_y = hex_row.hex_y
+
+        ts_z = round(hex_row.ts_z, 2)
+        ts_mipPt = hex_row.ts_mipPt
+
+        hex_polygon = Polygon(zip(hex_x, hex_y))
+        hex_centroid = hex_polygon.centroid
+        hex_centroid_x = hex_centroid.x
+        hex_centroid_y = hex_centroid.y
+
+        hex_eta_centroid, hex_phi_centroid = self.cart2sph(hex_centroid_x, hex_centroid_y, ts_z)
+
+        hex_info = []
+        for bin_feature in bins_layer:
+            bin_polygon = Polygon(bin_feature['geometry']['coordinates'][0])
+            start_time_1 = time.time()
+            overlap_area = hex_polygon.intersection(bin_polygon).area
+            end_time_1 = time.time()
+            #print("COMPUTE INTERSECTION", end_time_1 - start_time_1)
+            if overlap_area > 0:
+                percentage_overlap = overlap_area / hex_polygon.area
+                x_vertices = np.array([point[0] for point in bin_feature['geometry']['coordinates'][0]])
+                y_vertices = np.array([point[1] for point in bin_feature['geometry']['coordinates'][0]])
+                eta_vertices = np.array(bin_feature['properties'].get('Eta_vertices'))
+                phi_vertices = np.array(bin_feature['properties'].get('Phi_vertices'))
+                centroid_eta = np.mean(eta_vertices)
+                centroid_phi = np.mean(phi_vertices)
+                hex_info.append({
+                    'x_vertices': x_vertices,
+                    'y_vertices': y_vertices,
+                    'eta_vertices': eta_vertices,
+                    'phi_vertices': phi_vertices,
+                    'centroid_eta': centroid_eta,
+                    'centroid_phi': centroid_phi,
+                    'percentage_overlap': percentage_overlap
+                })
+
+        end_time = time.time()
+        #print("COMPUTE OVERLAP", end_time - start_time)
+        return {
+            'hex_x': hex_x,
+            'hex_y': hex_y,
+            'hex_x_centroid': hex_centroid_x,
+            'hex_y_centroid': hex_centroid_y,
+            'hex_eta_centroid': hex_eta_centroid,
+            'hex_phi_centroid': hex_phi_centroid,
+            'ts_mipPt': ts_mipPt,
+            'bins_overlapping': hex_info
+        }
+    
+    def eval_hex_bin_overlap_OK(self, data, df_bin):
+        print("Evaluating overlap between hexagons and towers bins layer by layer")
+        start_time = time.time()
+        with open(df_bin) as f:
+            bin_geojson = json.load(f)
+
+        bin_features = bin_geojson['features']
+        layer_names = set(bin_feature['properties']['Layer'] for bin_feature in bin_features)
+        event_groups = data.groupby('event')
+
+        hierarchical_data = []
+
+        for event, event_data in event_groups:
+            event_info = {'event': event, 'layers': []}
+            
+            for layer_name in layer_names:
+                layer_data = {'layer': layer_name, 'hexagons': []}
+                data_layer = event_data[event_data['ts_layer'] == layer_name]
+                bins_layer = [bin_feature for bin_feature in bin_features if bin_feature['properties']['Layer'] == layer_name]
+                
+                hex_info = []
+                for hex_row in data_layer.itertuples():
+                    hex_info.append(self.compute_overlap(hex_row, bins_layer))
+                
+                layer_data['hexagons'] = hex_info
+                event_info['layers'].append(layer_data)
+            
+            hierarchical_data.append(event_info)
+
+        hexagon_info = []
+        for event_data in hierarchical_data:
+            event = event_data['event']
+            for layer in event_data['layers']:
+                layer_idx = int(layer['layer'])  # Ensure the layer index is an integer
+                for hexagon in layer['hexagons']:
+                    hex_info = {
+                        'event': event,
+                        'layer': layer_idx,
+                        'hex_x': hexagon['hex_x'],
+                        'hex_y': hexagon['hex_y'],
+                        'hex_x_centroid': hexagon['hex_x_centroid'],
+                        'hex_y_centroid': hexagon['hex_y_centroid'],
+                        'hex_eta_centroid': hexagon['hex_eta_centroid'],
+                        'hex_phi_centroid': hexagon['hex_phi_centroid'],
+                        'ts_mipPt': hexagon['ts_mipPt'],
+                        'bins_overlapping': []
+                    }
+
+                    for bin_info in hexagon['bins_overlapping']:
+                        bin_data = {
+                            'x_vertices': bin_info['x_vertices'],
+                            'y_vertices': bin_info['y_vertices'],
+                            'eta_vertices': bin_info['eta_vertices'],
+                            'phi_vertices': bin_info['phi_vertices'],
+                            'centroid_eta': bin_info['centroid_eta'],
+                            'centroid_phi': bin_info['centroid_phi'],
+                            'percentage_overlap': bin_info['percentage_overlap']
+                        }
+                        hex_info['bins_overlapping'].append(bin_data)
+                    
+                    hexagon_info.append(hex_info)
+
+        df_hexagon_info = pd.DataFrame(hexagon_info)
+        df_hexagon_info.set_index(['event', 'layer'], inplace=True) #now, 'event' and 'layer' are part of the index, not regular columns. This enables hierarchical organization
+        end_time = time.time()
+
+        print("LOOP OVERLAP", end_time - start_time)
+
+        return df_hexagon_info
+
+    def find_particle_bin_and_evaluate_windows_2(self, baseline_df, genpart_df, window_size=12, subwindow_size=3):
+        print("window algo - position resolution")
+        particle_eta = genpart_df['gen_eta'].iloc[0]
+        particle_phi = genpart_df['gen_phi'].iloc[0]
+        #print("particle_eta", particle_eta)
+        #print("particle_phi", particle_phi)
+
+        # Find the bin where the generated particle is located
+        baseline_df['eta_center'] = baseline_df['eta_vertices'].apply(lambda x: np.mean(x))
+        baseline_df['phi_center'] = baseline_df['phi_vertices'].apply(lambda x: np.mean(x))
+
+        # Find the bin with the minimum distance to the particle's eta and phi
+        particle_bin_idx = ((baseline_df['eta_center'] - particle_eta).abs() + (baseline_df['phi_center'] - particle_phi).abs()).idxmin()
+        particle_bin = baseline_df.loc[particle_bin_idx]
+
+        #print("particle_bin", particle_bin)
+
+        # Get the minimum vertex of the particle's bin
+        min_eta_vertex = np.min(particle_bin['eta_vertices'])
+        min_phi_vertex = np.min(particle_bin['phi_vertices'])
+
+        # Define the window size in eta and phi
+        bin_eta_size = np.max(particle_bin['eta_vertices']) - min_eta_vertex
+        bin_phi_size = np.max(particle_bin['phi_vertices']) - min_phi_vertex
+
+        # Calculate eta_min and phi_min based on the minimum vertex of the particle's bin
+        eta_min = min_eta_vertex - (window_size // 2) * bin_eta_size
+        eta_max = min_eta_vertex + (window_size // 2) * bin_eta_size
+        phi_min = min_phi_vertex - (window_size // 2) * bin_phi_size
+        phi_max = min_phi_vertex + (window_size // 2) * bin_phi_size
+
+        window_bins = baseline_df[
+            (baseline_df['eta_center'] >= eta_min) & (baseline_df['eta_center'] <= eta_max) &
+            (baseline_df['phi_center'] >= phi_min) & (baseline_df['phi_center'] <= phi_max)
+        ]
+
+        # Create an empty list to store the energies for each 3x3 subwindow
+        subwindow_energies = []
+
+        # Step size for subwindow iteration
+        step_eta = bin_eta_size
+        step_phi = bin_phi_size
+
+        max_energy = -1
+        best_subwindow = None
+
+        # Iterate over each possible 3x3 subwindow within the 12x12 window
+        for i in range(window_size - subwindow_size + 1):
+            for j in range(window_size - subwindow_size + 1):
+                eta_start = eta_min + i * step_eta
+                eta_end = eta_start + subwindow_size * step_eta
+                phi_start = phi_min + j * step_phi
+                phi_end = phi_start + subwindow_size * step_phi
+
+                subwindow = window_bins[
+                    (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] < eta_end) &
+                    (window_bins['phi_center'] >= phi_start) & (window_bins['phi_center'] < phi_end)
+                ]
+                total_energy = subwindow['mipPt'].sum()
+                subwindow_energies.append(total_energy)
+
+                #plotMS.plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max, eta_start, eta_end, phi_start, phi_end)
+
+                if total_energy > max_energy:
+                    max_energy = total_energy
+                    best_subwindow = subwindow
+
+        if best_subwindow is not None:
+            # Calculate the weighted eta position
+            total_energy = best_subwindow['mipPt'].sum()
+            weighted_eta = (best_subwindow['mipPt'] * best_subwindow['eta_center']).sum() / total_energy
+            #print(best_subwindow['eta_center'])
+            weighted_phi = (best_subwindow['mipPt'] * best_subwindow['phi_center']).sum() / total_energy
+
+            # Calculate the difference with the actual eta of the generated particle
+            eta_diff = weighted_eta - particle_eta
+            phi_diff = weighted_phi - particle_phi
+
+            print(f"Weighted eta position: {weighted_eta}")
+            print(f"Generated particle eta: {particle_eta}")
+            print(f"Difference: {eta_diff}")
+            print(f"Difference: {phi_diff}")
+
+        #print("subwindow_energies", subwindow_energies)
+        return subwindow_energies, eta_diff, phi_diff
+
+    def eval_eta_phi_photon_resolution(self, df, genpart_df, window_size=12, subwindow_size=3):
+        all_results = []
+
+        #print("GEN PART COLUMNS", genpart_df.columns)
+        #print(genpart_df['event'])
+
+        unique_events = df['event'].unique()
+        #print("len(unique_events)", len(unique_events))
+
+        for event in unique_events:
+            #print(f"Processing event {event}...")
+            
+            # Extract the DataFrame for the current event
+            event_df = df[df['event'] == event]
+
+            #print("event_df", event_df, "genpart_df['event']", genpart_df['gen_eta'])
+
+            if len(unique_events) ==1: 
+                event_genpart_df = genpart_df
+            else: 
+                event_genpart_df = genpart_df[genpart_df['event'] == event]
+
+            #print("event_genpart_df", event_genpart_df)
+
+            # Apply the find_particle_bin_and_evaluate_windows function
+            subwindow_energies, eta_diff, phi_diff = self.find_particle_bin_and_evaluate_windows_2(event_df, event_genpart_df, window_size, subwindow_size)
+
+            # Store the results
+            result = {
+                'event': event,
+                'subwindow_energies': subwindow_energies,
+                'eta_diff': eta_diff,
+                'phi_diff': phi_diff
+            }
+            all_results.append(result)
+
+        return pd.DataFrame(all_results)
