@@ -420,7 +420,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     ax.set_title(f'{algo}_{particle}_{event}')
 
     ax.autoscale()
-    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_SUMMED_NEW.png', dpi=500)  # Save the plot as an image
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_towers.png', dpi=500)  # Save the plot as an image
     plt.show()
 
 def plot_hex_bin_overlap_save(hdf5_filename, output_folder):
@@ -597,7 +597,7 @@ def plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max,
     plt.title(f'3x3 Subwindow from ({eta_start}, {phi_start}) to ({eta_end}, {phi_end})')
     plt.show()
 
-def plot_eta_phi_resolution(results_df):
+def plot_eta_phi_resolution(results_df, algo, event, particle, subdet):
     """
     Plot histograms of eta and phi differences for each event with Gaussian fits.
     
@@ -619,7 +619,7 @@ def plot_eta_phi_resolution(results_df):
     plt.plot(x, p, 'k', linewidth=2)
     plt.xlabel('Eta Difference')
     plt.ylabel('Frequency')
-    plt.title(f'Histogram of Eta Differences\n mu={mu_eta:.2f}, sigma={std_eta:.2f}')
+    plt.title(f'Histogram of Eta Differences\n mu={mu_eta:.5f}, sigma={std_eta:.5f}')
     #plt.savefig('eta_diff_histogram.png')
 
     # Plot histogram for phi differences
@@ -632,8 +632,8 @@ def plot_eta_phi_resolution(results_df):
     plt.plot(x, p, 'k', linewidth=2)
     plt.xlabel('Phi Difference')
     plt.ylabel('Frequency')
-    plt.title(f'Histogram of Phi Differences\n mu={mu_phi:.2f}, sigma={std_phi:.2f}')
-    plt.savefig('eta_phi_diff_histogram_CEH_event_4875.png')
+    plt.title(f'Histogram of Phi Differences\n mu={mu_phi:.5f}, sigma={std_phi:.5f}')
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution.png')
 
     plt.tight_layout()
     plt.show()

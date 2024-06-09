@@ -889,14 +889,8 @@ class Processing():
             # Initialize a dictionary to store the summed mipPt for each bin by layer for the current event
             bin_mipPt_by_layer = {}
 
-            # Convert event DataFrame to numpy array for faster computation
-            #hexagon_info_array = df_event.to_numpy()
             # Get unique layer indices for the current event
             unique_layers = df_event.index.get_level_values('layer').unique()
-            #unique_layers = np.unique(hexagon_info_array[:, 0])
-            #print("unique_layers", unique_layers)
-
-            #unique_layers = np.array(unique_layers)
 
             # Filter layers if required
             if subdet == 'CEE':
@@ -1158,6 +1152,106 @@ class Processing():
                    
         return df_over_final
 
+    def area_overlap_8Towers_by_event(self, df_hexagon_info, subdet):
+        print("Algorithm 1/8s towers ...")
+        start_time = time.time()
+
+        # Initialize a list to store the results for all events
+        all_event_results = []
+
+        # Get unique event indices
+        unique_events = df_hexagon_info.index.get_level_values('event').unique()
+
+        # Iterate over each event
+        for event in unique_events:
+            print(f"Processing event {event}...")
+
+            # Extract the DataFrame for the current event
+            df_event = df_hexagon_info.loc[event]
+
+            # Get unique layer indices for the current event
+            unique_layers = df_event.index.get_level_values('layer').unique()
+
+            if subdet == 'CEE':
+                print("CEE subdet ...")
+                unique_layers = unique_layers[unique_layers < 29]
+            elif subdet == 'CEH':
+                print("CEH subdet ...")
+                unique_layers = unique_layers[unique_layers >= 29]
+            else:
+                print("CEE + CEH subdet ...")
+
+            # Iterate over unique layer indices
+            for layer_idx in unique_layers:
+                # Filter DataFrame for the current layer
+                layer_df = df_event[df_event.index.get_level_values('layer') == layer_idx]
+
+                # Iterate over each row of the filtered DataFrame for the current layer
+                for _, row in layer_df.iterrows():
+                    # Initialize mipPt values for all bins to 0
+                    for bin_info in row['bins_overlapping']:
+                        bin_info['mipPt'] = 0.0
+                        bin_info['event'] = event  # Ensure event information is added
+                        bin_info['layer'] = layer_idx  # Ensure layer information is added
+
+                    total_energy = row['ts_mipPt']
+                    #print("Total energy hexagon:", total_energy)
+
+                    # Filter out bins with area overlap greater than 0
+                    filtered_bins = [bin_info for bin_info in row['bins_overlapping'] if bin_info['percentage_overlap'] > 0]
+                    num_bins = len(filtered_bins)
+
+                    # Sort bins based on percentage overlap in descending order
+                    sorted_bins = sorted(filtered_bins, key=lambda x: x['percentage_overlap'], reverse=True)
+
+                    # Calculate energy distribution
+                    remaining_energy = total_energy
+                    top_bins = sorted_bins[:8] if num_bins > 8 else sorted_bins
+                    for bin_info in top_bins:
+                        percent = round(bin_info['percentage_overlap'] * 8)
+                        percent = max(1, percent)  # Ensure at least 1
+                        energy_fraction = percent / 8
+                        energy_assigned = min(remaining_energy, energy_fraction * total_energy)
+                        bin_info['mipPt'] = energy_assigned
+                        remaining_energy -= energy_assigned
+                        if remaining_energy <= 0:
+                            #print("Energy finished")
+                            break  # Stop assigning energy if all available energy is exhausted
+
+                    # Append results for the current layer to the event_results list
+                    all_event_results.extend(row['bins_overlapping'])
+
+        #print("All events results:", all_event_results)
+        # Calculate the execution time
+        end_time = time.time()
+        print("Execution time loop - area overlap by event:", end_time - start_time)
+
+        # Extract mipPt information for each bin and construct DataFrame
+        flattened_bins = []
+        for bin_info in all_event_results:
+            eta_vertices = bin_info['eta_vertices']
+            phi_vertices = bin_info['phi_vertices']
+            mipPt = bin_info['mipPt']
+            event = bin_info['event']
+            layer = bin_info['layer']
+            flattened_bins.append({'event': event, 'layer': layer, 'eta_vertices': tuple(eta_vertices), 'phi_vertices': tuple(phi_vertices), 'mipPt': mipPt})
+
+        # Convert the list of dictionaries to a DataFrame
+        flattened_bins_df = pd.DataFrame(flattened_bins)
+
+        # Group by event, eta_vertices, and phi_vertices and sum the mipPt
+        df_over_final = flattened_bins_df.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'mipPt': 'sum'}).reset_index()
+
+        total_mipPt = df_over_final['mipPt'].sum()
+        #print("Total mipPt sum:", total_mipPt)
+
+        # Print intermediate results
+        #print("Flattened bins:", flattened_bins_df)
+        #print("Final bins:", df_over_final)
+
+        print("Execution time loop - area 8towers:", end_time - start_time)
+
+        return df_over_final
 
     def sph2cart(self, eta, phi, z=322.):
         ''' Useful conversion: Spherical coordinates to cartesian coordinates (x, y)  '''
@@ -1527,26 +1621,25 @@ class Processing():
         print("QUIIIIII, hexagon_info_df COLUMNS", hexagon_info_df.columns)
 
         if algo == 'baseline':
-
             df_algo = self.baseline_by_event(hexagon_info_df, subdet)
-
+            
         elif algo == 'area_overlap':
             df_algo = self.area_overlap_by_event(hexagon_info_df, subdet)
 
         elif algo == '8towers':
-            df = self.area_overlap_8Towers(overlap_data, subdet) #not working at this point 
+            df_algo = self.area_overlap_8Towers_by_event(hexagon_info_df, subdet)
         
         else:
             raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap' or '8towers'.")
 
         df , df_sum = self.apply_update_to_each_event(df_algo, bins_df)
 
+        print("Eta/Phi resolution evaluation")
         df_resolution = self.eval_eta_phi_photon_resolution(df, data_gen, window_size=12, subwindow_size=3)
-        plotMS.plot_eta_phi_resolution(df_resolution)
+        plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
 
-        self.save_eta_phi_differences(df_resolution, 'eta_phi_diff_data_baseline.txt')
+        self.save_eta_phi_differences(df_resolution, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution.txt')
         plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet)
-
 
     def compute_overlap(self, hex_row, bins_layer):
         start_time = time.time()
@@ -1672,13 +1765,14 @@ class Processing():
         return df_hexagon_info
 
     def find_particle_bin_and_evaluate_windows_2(self, baseline_df, genpart_df, window_size=12, subwindow_size=3):
-        print("window algo - position resolution")
+        #print("window algo - position resolution")
         particle_eta = genpart_df['gen_eta'].iloc[0]
         particle_phi = genpart_df['gen_phi'].iloc[0]
         #print("particle_eta", particle_eta)
         #print("particle_phi", particle_phi)
 
         # Find the bin where the generated particle is located
+        baseline_df = baseline_df.copy()
         baseline_df['eta_center'] = baseline_df['eta_vertices'].apply(lambda x: np.mean(x))
         baseline_df['phi_center'] = baseline_df['phi_vertices'].apply(lambda x: np.mean(x))
 
@@ -1749,10 +1843,10 @@ class Processing():
             eta_diff = weighted_eta - particle_eta
             phi_diff = weighted_phi - particle_phi
 
-            print(f"Weighted eta position: {weighted_eta}")
-            print(f"Generated particle eta: {particle_eta}")
-            print(f"Difference: {eta_diff}")
-            print(f"Difference: {phi_diff}")
+            #print(f"Weighted eta position: {weighted_eta}")
+            #print(f"Generated particle eta: {particle_eta}")
+            #print(f"Difference: {eta_diff}")
+            #print(f"Difference: {phi_diff}")
 
         #print("subwindow_energies", subwindow_energies)
         return subwindow_energies, eta_diff, phi_diff
