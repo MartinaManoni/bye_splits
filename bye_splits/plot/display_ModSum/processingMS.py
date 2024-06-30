@@ -7,7 +7,7 @@ import sys
 parent_dir = os.path.abspath(__file__ + 3 * '/..')
 sys.path.insert(0, parent_dir)
 
-from dash import dcc, html
+#from dash import dcc, html
 import json
 #import dash_daq as daq
 import h5py
@@ -22,13 +22,16 @@ from shapely.strtree import STRtree
 
 log = logging.getLogger(__name__)
 
-from bye_splits.plot.display_plotly import yaml, np, pd, go, dbc
+#from bye_splits.plot.display_plotly import yaml, np, pd, go, dbc
 from utils import params, common 
 from data_handle.data_process import *
 from data_handle.geometry import GeometryData
 import pandas as pd
+import numpy as np
+import yaml
 import processingMS
 import plotMS
+import matplotlib
 from scipy.spatial.distance import cdist
 from shapely import geometry as geom
 from shapely.geometry import Polygon, mapping, shape, MultiPolygon, Point
@@ -37,9 +40,7 @@ from matplotlib.patches import Polygon as matPoly
 from matplotlib.collections import PatchCollection
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import cpu_count
-
-
-
+#matplotlib.use("TkAgg")
 
 class Processing():
     def __init__(self):
@@ -1125,7 +1126,7 @@ class Processing():
             ts_iphi = row['ts_iphi']
             tc_layer = row['tc_layer']
             ordered_vertices_list = row['vertices_clockwise']
-            print(ordered_vertices_list)
+            #print(ordered_vertices_list)
 
             # Convert string representation of vertices to list of floats
             ordered_vertices = [list(map(float, vertex)) for vertex in ordered_vertices_list]
@@ -1188,7 +1189,7 @@ class Processing():
         # No need to group by layer since we're only interested in the first layer bins
         final_df = merged_df
 
-        print("Final df_baseline", final_df)
+        #print("Final df_baseline", final_df)
         return final_df
 
     def apply_update_to_each_event(self, df, bins_df):
@@ -1239,8 +1240,8 @@ class Processing():
         #print("OVERLAP DATA INPUT columns ", overlap_data.columns)
 
         hexagon_info_df = self.eval_hex_bin_overlap_OK(data, bin_geojson_filename)
-        print("QUIIIIII, hexagon_info_df", hexagon_info_df)
-        print("QUIIIIII, hexagon_info_df COLUMNS", hexagon_info_df.columns)
+        #print("QUIIIIII, hexagon_info_df", hexagon_info_df)
+        #print("QUIIIIII, hexagon_info_df COLUMNS", hexagon_info_df.columns)
 
         if algo == 'baseline':
             df_algo = self.baseline_by_event(hexagon_info_df, subdet)
@@ -1257,39 +1258,37 @@ class Processing():
         df , df_sum = self.apply_update_to_each_event(df_algo, bins_df)
 
         print("Eta/Phi resolution evaluation")
-        df_resolution = self.eval_eta_phi_photon_resolution(df, data_gen, window_size=12, subwindow_size=3)
+        df_resolution = self.eval_eta_phi_photon_resolution(df, data_gen, window_size=8, subwindow_size=3)
+        self.save_eta_phi_differences(df_resolution, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_hadd_123_9x9_OK.txt')
         plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
-
-        self.save_eta_phi_differences(df_resolution, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution.txt')
         plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet)
 
+    def compute_overlap(self, hex_polygon, hex_centroid, hex_properties, bins_layer):
+        hex_centroid_x, hex_centroid_y = hex_centroid.x, hex_centroid.y
+        hex_eta_centroid, hex_phi_centroid = self.cart2sph(hex_centroid_x, hex_centroid_y, hex_properties['ts_z'])
 
-    def compute_overlap(self, hex_row, bins_layer):
-        start_time = time.time()
-        hex_x = hex_row.hex_x
-        hex_y = hex_row.hex_y
+        # Create an R-tree spatial index for fast nearest-neighbor queries
+        #bins_tree = STRtree([bin_feature['geometry'] for bin_feature in bins_layer])
 
-        ts_z = round(hex_row.ts_z, 2)
-        ts_mipPt = hex_row.ts_mipPt
+        # Find the 35 closest bins using the spatial index
+        #closest_bins = bins_tree.nearest(hex_centroid, 35)
 
-        hex_polygon = Polygon(zip(hex_x, hex_y))
-        hex_centroid = hex_polygon.centroid
-        hex_centroid_x = hex_centroid.x
-        hex_centroid_y = hex_centroid.y
-
-        hex_eta_centroid, hex_phi_centroid = self.cart2sph(hex_centroid_x, hex_centroid_y, ts_z)
+        # Compute distances to all bin centroids and sort them
+        bin_distances = [
+            (bin_feature, hex_centroid.distance(bin_feature['geometry'].centroid))
+            for bin_feature in bins_layer
+        ]
+        bin_distances.sort(key=lambda x: x[1])  # Sort by distance
+        closest_bins = [bin_dist[0] for bin_dist in bin_distances[:35]] #takes total of 1.8 sec per event 
 
         hex_info = []
-        for bin_feature in bins_layer:
-            bin_polygon = Polygon(bin_feature['geometry']['coordinates'][0])
-            start_time_1 = time.time()
+        for bin_feature in closest_bins:
+            bin_polygon = bin_feature['geometry']
             overlap_area = hex_polygon.intersection(bin_polygon).area
-            end_time_1 = time.time()
-            #print("COMPUTE INTERSECTION", end_time_1 - start_time_1)
             if overlap_area > 0:
                 percentage_overlap = overlap_area / hex_polygon.area
-                x_vertices = np.array([point[0] for point in bin_feature['geometry']['coordinates'][0]])
-                y_vertices = np.array([point[1] for point in bin_feature['geometry']['coordinates'][0]])
+                x_vertices = np.array([point[0] for point in bin_polygon.exterior.coords])
+                y_vertices = np.array([point[1] for point in bin_polygon.exterior.coords])
                 eta_vertices = np.array(bin_feature['properties'].get('Eta_vertices'))
                 phi_vertices = np.array(bin_feature['properties'].get('Phi_vertices'))
                 centroid_eta = np.mean(eta_vertices)
@@ -1304,21 +1303,21 @@ class Processing():
                     'percentage_overlap': percentage_overlap
                 })
 
-        end_time = time.time()
-        #print("COMPUTE OVERLAP", end_time - start_time)
         return {
-            'hex_x': hex_x,
-            'hex_y': hex_y,
+            'hex_x': hex_properties['hex_x'],
+            'hex_y': hex_properties['hex_y'],
             'hex_x_centroid': hex_centroid_x,
             'hex_y_centroid': hex_centroid_y,
             'hex_eta_centroid': hex_eta_centroid,
             'hex_phi_centroid': hex_phi_centroid,
-            'ts_mipPt': ts_mipPt,
+            'ts_mipPt': hex_properties['ts_mipPt'],
             'bins_overlapping': hex_info
         }
-    
+
+
     def eval_hex_bin_overlap_OK(self, data, df_bin):
         print("Evaluating overlap between hexagons and towers bins layer by layer")
+
 
         with open(df_bin) as f:
             bin_geojson = json.load(f)
@@ -1326,6 +1325,32 @@ class Processing():
         bin_features = bin_geojson['features']
         layer_names = set(bin_feature['properties']['Layer'] for bin_feature in bin_features)
         event_groups = data.groupby('event')
+
+        # Precompute bin geometries
+        bins_by_layer = {
+            layer_name: [
+                {
+                    'geometry': Polygon(bin_feature['geometry']['coordinates'][0]),
+                    'properties': bin_feature['properties']
+                } for bin_feature in bin_features if bin_feature['properties']['Layer'] == layer_name
+            ] for layer_name in layer_names
+        }
+
+        # Precompute hexagon geometries
+        hex_geometries = {
+            (event, layer_name): [
+                {
+                    'hex_properties': {
+                        'hex_x': hex_row.hex_x,
+                        'hex_y': hex_row.hex_y,
+                        'ts_z': round(hex_row.ts_z, 2),
+                        'ts_mipPt': hex_row.ts_mipPt
+                    },
+                    'hex_polygon': Polygon(zip(hex_row.hex_x, hex_row.hex_y)),
+                    'hex_centroid': Polygon(zip(hex_row.hex_x, hex_row.hex_y)).centroid
+                } for hex_row in event_data[event_data['ts_layer'] == layer_name].itertuples()
+            ] for event, event_data in event_groups for layer_name in layer_names
+        }
 
         hierarchical_data = []
 
@@ -1335,12 +1360,11 @@ class Processing():
             
             for layer_name in layer_names:
                 layer_data = {'layer': layer_name, 'hexagons': []}
-                data_layer = event_data[event_data['ts_layer'] == layer_name]
-                bins_layer = [bin_feature for bin_feature in bin_features if bin_feature['properties']['Layer'] == layer_name]
-                
-                hex_info = []
-                for hex_row in data_layer.itertuples():
-                    hex_info.append(self.compute_overlap(hex_row, bins_layer))
+                bins_layer = bins_by_layer[layer_name]
+                hex_info = [
+                    self.compute_overlap(hex_geometry['hex_polygon'], hex_geometry['hex_centroid'], hex_geometry['hex_properties'], bins_layer)
+                    for hex_geometry in hex_geometries[(event, layer_name)]
+                ]
                 
                 layer_data['hexagons'] = hex_info
                 event_info['layers'].append(layer_data)
@@ -1351,6 +1375,7 @@ class Processing():
         print("LOOP OVERLAP", end_time - start_time)
 
         hexagon_info = []
+        max_overlapping_bins = 0
         for event_data in hierarchical_data:
             event = event_data['event']
             for layer in event_data['layers']:
@@ -1383,17 +1408,23 @@ class Processing():
                     
                     hexagon_info.append(hex_info)
 
+                    # Update the maximum number of overlapping bins
+                    #num_overlapping_bins = len(hexagon['bins_overlapping'])
+                    #if num_overlapping_bins > max_overlapping_bins:
+                        #max_overlapping_bins = num_overlapping_bins
+
+        #print("max number of overlapping bins", max_overlapping_bins)
         df_hexagon_info = pd.DataFrame(hexagon_info)
-        df_hexagon_info.set_index(['event', 'layer'], inplace=True) #now, 'event' and 'layer' are part of the index, not regular columns. This enables hierarchical organization
+        df_hexagon_info.set_index(['event', 'layer'], inplace=True)  # Now, 'event' and 'layer' are part of the index, not regular columns. This enables hierarchical organization
 
         return df_hexagon_info
 
-    def find_particle_bin_and_evaluate_windows_2(self, baseline_df, genpart_df, window_size=12, subwindow_size=3):
-        #print("window algo - position resolution")
+    def find_particle_bin_and_evaluate_windows_2(self, baseline_df, genpart_df, window_size=8, subwindow_size=3):
         particle_eta = genpart_df['gen_eta'].iloc[0]
         particle_phi = genpart_df['gen_phi'].iloc[0]
-        #print("particle_eta", particle_eta)
-        #print("particle_phi", particle_phi)
+        event_number = genpart_df['event'].iloc[0]
+        #print("gen part dataframe",  genpart_df)
+        #print("gen part dataframe",  genpart_df.columns)
 
         # Find the bin where the generated particle is located
         baseline_df = baseline_df.copy()
@@ -1404,7 +1435,7 @@ class Processing():
         particle_bin_idx = ((baseline_df['eta_center'] - particle_eta).abs() + (baseline_df['phi_center'] - particle_phi).abs()).idxmin()
         particle_bin = baseline_df.loc[particle_bin_idx]
 
-        #print("particle_bin", particle_bin)
+        #print("particle bin", particle_bin)
 
         # Get the minimum vertex of the particle's bin
         min_eta_vertex = np.min(particle_bin['eta_vertices'])
@@ -1416,9 +1447,15 @@ class Processing():
 
         # Calculate eta_min and phi_min based on the minimum vertex of the particle's bin
         eta_min = min_eta_vertex - (window_size // 2) * bin_eta_size
-        eta_max = min_eta_vertex + (window_size // 2) * bin_eta_size
+        eta_max = min_eta_vertex + (1+ (window_size // 2)) * bin_eta_size
         phi_min = min_phi_vertex - (window_size // 2) * bin_phi_size
-        phi_max = min_phi_vertex + (window_size // 2) * bin_phi_size
+        phi_max = min_phi_vertex + (1+(window_size // 2)) * bin_phi_size
+
+        # Ensure eta and phi bounds are within the specified range
+        eta_min = max(eta_min, 1.305)
+        eta_max = min(eta_max, 3.045)
+        phi_min = max(phi_min, -3.141593)
+        phi_max = min(phi_max, 3.141593)
 
         window_bins = baseline_df[
             (baseline_df['eta_center'] >= eta_min) & (baseline_df['eta_center'] <= eta_max) &
@@ -1434,48 +1471,112 @@ class Processing():
 
         max_energy = -1
         best_subwindow = None
+        best_subwindow_data = {}
 
         # Iterate over each possible 3x3 subwindow within the 12x12 window
-        for i in range(window_size - subwindow_size + 1):
-            for j in range(window_size - subwindow_size + 1):
+        for i in range(window_size - subwindow_size + 2):
+            for j in range(window_size - subwindow_size + 2):
                 eta_start = eta_min + i * step_eta
                 eta_end = eta_start + subwindow_size * step_eta
                 phi_start = phi_min + j * step_phi
                 phi_end = phi_start + subwindow_size * step_phi
 
+                eta_start = max(eta_start, 1.305)
+                eta_end = min(eta_end, 3.045)
+                phi_start = max(phi_start, -3.141593)
+                phi_end = min(phi_end, 3.141593)
+
                 subwindow = window_bins[
-                    (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] < eta_end) &
-                    (window_bins['phi_center'] >= phi_start) & (window_bins['phi_center'] < phi_end)
+                    (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] <= eta_end) &
+                    (window_bins['phi_center'] >= phi_start) & (window_bins['phi_center'] <= phi_end)
                 ]
-                total_energy = subwindow['mipPt'].sum()
-                subwindow_energies.append(total_energy)
+                #print("subwindow", subwindow.columns)
+                #print("subwindow", subwindow.columns)
+                if len(subwindow) == subwindow_size * subwindow_size:
+                    total_energy = subwindow['mipPt'].sum()
+                    subwindow_energies.append(total_energy)
 
-                #plotMS.plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max, eta_start, eta_end, phi_start, phi_end)
+                    particle_eta_1 = genpart_df['gen_eta'].iloc[0]
+                    particle_phi_1 = genpart_df['gen_phi'].iloc[0]
 
-                if total_energy > max_energy:
-                    max_energy = total_energy
-                    best_subwindow = subwindow
+                    #plotMS.plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max, eta_start, eta_end, phi_start, phi_end, particle_eta_1, particle_phi_1)
 
-        if best_subwindow is not None:
+                    if total_energy > max_energy:
+                        max_energy = total_energy
+                        best_subwindow = subwindow
+                        best_subwindow_data = {
+                        'subwindow': best_subwindow,
+                        'total_energy': max_energy
+                    }
+
+        #print("subwindow data", best_subwindow_data)
+        if best_subwindow_data:
+            best_subwindow = best_subwindow_data['subwindow']
+
             # Calculate the weighted eta position
-            total_energy = best_subwindow['mipPt'].sum()
-            weighted_eta = (best_subwindow['mipPt'] * best_subwindow['eta_center']).sum() / total_energy
-            #print(best_subwindow['eta_center'])
-            weighted_phi = (best_subwindow['mipPt'] * best_subwindow['phi_center']).sum() / total_energy
+            if best_subwindow_data['total_energy'] < 0.001:
+                # If total energy is very small, use the center of the central bin
+                central_bin_index = 4  # Fifth row (assuming zero-indexed)
+                weighted_eta = best_subwindow.iloc[central_bin_index]['eta_center']
+                weighted_phi = best_subwindow.iloc[central_bin_index]['phi_center']
+            else:
+                # Otherwise, calculate weighted eta and phi positions
+                total_energy = best_subwindow['mipPt'].sum()
+                weighted_eta = (best_subwindow['mipPt'] * best_subwindow['eta_center']).sum() / total_energy
+                weighted_phi = (best_subwindow['mipPt'] * best_subwindow['phi_center']).sum() / total_energy
 
-            # Calculate the difference with the actual eta of the generated particle
-            eta_diff = weighted_eta - particle_eta
-            phi_diff = weighted_phi - particle_phi
+            prova_phi = best_subwindow.iloc[4]['phi_center']
+            prova_eta = best_subwindow.iloc[4]['eta_center']
 
-            #print(f"Weighted eta position: {weighted_eta}")
-            #print(f"Generated particle eta: {particle_eta}")
-            #print(f"Difference: {eta_diff}")
-            #print(f"Difference: {phi_diff}")
+            #print("prova eta e phi", prova_phi, prova_eta)
 
-        #print("subwindow_energies", subwindow_energies)
+        # Calculate the difference with the actual eta of the generated particle
+        eta_diff = weighted_eta - particle_eta
+        phi_diff = weighted_phi - particle_phi
+
+        # Check for infinite or NaN values
+        if not np.isfinite(eta_diff) or not np.isfinite(phi_diff):
+            print("Warning: Infinite or NaN values detected in eta_diff or phi_diff. Handling edge case.")
+            # Handle edge case (for example, set to zero or NaN)
+            eta_diff = 0.0
+            phi_diff = 0.0  # or phi_diff = np.nan
+
+        # Save required data to files --> devo lavorare tutto in energy e non in mipPt altriemnti non riesco a confrontare con la gen part
+        #genpart_energy = genpart_df['gen_en'].iloc[0]
+        #best_subwindow_energy = max_energy
+        #energy_ratio = best_subwindow_energy / genpart_energy if genpart_energy != 0 else np.nan
+
+        #with open('genpart_energy.txt', 'a') as f1, open('best_subwindow_energy.txt', 'a') as f2, open('energy_ratio.txt', 'a') as f3:
+            #f1.write(f"{genpart_energy}\n")
+            #f2.write(f"{best_subwindow_energy}\n")
+            #f3.write(f"{energy_ratio}\n")
+
+        events_gt_2_5 = []
+        events_gt_2_5_and_eta_diff_lt_minus_0_2 = []
+        # Save eta_diff and phi_diff to different files based on gen_eta condition
+        if particle_eta < 2:
+            with open('diffs_lt_2.txt', 'a') as f:
+                f.write(f"{eta_diff},{phi_diff}\n")
+        elif particle_eta > 2.5:
+            with open('diffs_gt_2_5.txt', 'a') as f:
+                f.write(f"{eta_diff},{phi_diff}\n")
+                events_gt_2_5.append(event_number)
+            if eta_diff < -0.2:
+                events_gt_2_5_and_eta_diff_lt_minus_0_2.append(event_number)
+                print(f"Event info: {event_number}, eta_diff: {eta_diff}, phi_diff: {phi_diff}")
+
+        #Save event numbers to files
+        with open('events_gt_2_5.txt', 'a') as f:
+            for event in events_gt_2_5:
+                f.write(f"{event}\n")
+
+        with open('events_gt_2_5_and_eta_diff_lt_minus_0_2.txt', 'a') as f:
+            for event in events_gt_2_5_and_eta_diff_lt_minus_0_2:
+                f.write(f"{event}\n")
+
         return subwindow_energies, eta_diff, phi_diff
 
-    def eval_eta_phi_photon_resolution(self, df, genpart_df, window_size=12, subwindow_size=3):
+    def eval_eta_phi_photon_resolution(self, df, genpart_df, window_size=8, subwindow_size=3):
         all_results = []
 
         #print("GEN PART COLUMNS", genpart_df.columns)
@@ -1497,7 +1598,7 @@ class Processing():
             else: 
                 event_genpart_df = genpart_df[genpart_df['event'] == event]
 
-            #print("event_genpart_df", event_genpart_df)
+            print("event_genpart_df", event_genpart_df)
 
             # Apply the find_particle_bin_and_evaluate_windows function
             subwindow_energies, eta_diff, phi_diff = self.find_particle_bin_and_evaluate_windows_2(event_df, event_genpart_df, window_size, subwindow_size)

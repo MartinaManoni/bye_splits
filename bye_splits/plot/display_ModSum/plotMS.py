@@ -8,7 +8,7 @@ import sys
 parent_dir = os.path.abspath(__file__ + 2 * '/..')
 sys.path.insert(0, parent_dir)
 
-from bye_splits.plot.display_plotly import yaml, np, pd, go, dcc
+#from bye_splits.plot.display_plotly import yaml, np, pd, go, dcc
 
 import h5py
 import json
@@ -20,6 +20,7 @@ import plotly.io as pio
 from scipy.spatial.distance import cdist
 from scipy.stats import norm
 
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon as PolygonPlt
 from matplotlib.colors import Normalize
@@ -32,6 +33,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import processingMS
+#matplotlib.use("TkAgg")
 
 def plot_grid(df_grid, df_bin, kw):
     fig = go.Figure()
@@ -356,8 +358,10 @@ def plot_baseline(df_baseline_proj, algo, event, particle):
     plt.show()
 
 def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, subdet):
+    print("plotting eta_phi_towers")
     fig, ax = plt.subplots(figsize=(10, 8))
 
+    print ("DATA GEN", data_gen)
     # Plotting the grid of bins
     initial_kw = {
         'NbinsEta': 20,
@@ -385,6 +389,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
 
     # Plotting bins with colors and annotations
     for _, row in df_baseline_proj.iterrows():
+
         eta_vertices = row['eta_vertices']
         phi_vertices = row['phi_vertices']
         mipPt = row['mipPt']
@@ -399,13 +404,8 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
         text_x = np.mean(eta_vertices)
         text_y = np.mean(phi_vertices)
         ax.text(text_x, text_y, f'{mipPt:.1f}', color='black', ha='center', va='center', fontsize=5)
-
-    #if event != '-1':
-        # Overlay gen_eta and gen_phi points
-        #print('gen_eta', data_gen['gen_eta'])
-        #print('gen_phi', data_gen['gen_phi'])
-        #print('gen_eta', data_gen['gen_pt'])
-        ax.scatter(data_gen['gen_eta'], data_gen['gen_phi'], marker='x', color='red', label='Gen Points')
+        ax.text(data_gen['gen_eta'], data_gen['gen_phi'], f'.', color='red', ha='center', va='center', fontsize=5)
+        #plt.scatter(data_gen['gen_eta'], data_gen['gen_phi'], marker='o', color='red')
 
     # Add color bar
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
@@ -420,6 +420,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     ax.set_title(f'{algo}_{particle}_{event}')
 
     ax.autoscale()
+    #plt.legend()
     plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_towers.png', dpi=500)  # Save the plot as an image
     plt.show()
 
@@ -570,7 +571,7 @@ def plot_full_geom(bins_data, hexagons_data, scint_data, output_dir, plot_type='
         fig.savefig(output_file, dpi=700)
         plt.close(fig)
 
-def plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max, eta_start, eta_end, phi_start, phi_end):
+def plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max, eta_start, eta_end, phi_start, phi_end,particle_eta,particle_phi):
     # Create a figure and axis
     fig, ax = plt.subplots(figsize=(10, 10))
 
@@ -589,13 +590,20 @@ def plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max,
         polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='red', facecolor='none')
         ax.add_patch(polygon)
 
+    # Plot the particle position with a red cross
+    plt.scatter(particle_eta, particle_phi, color='red', marker='x')
+
+
     # Display the plot
     plt.xlim(eta_min, eta_max)
     plt.ylim(phi_min, phi_max)
     plt.xlabel('Eta')
     plt.ylabel('Phi')
     plt.title(f'3x3 Subwindow from ({eta_start}, {phi_start}) to ({eta_end}, {phi_end})')
+    plt.savefig(f'Subwindow_from_{eta_start}_{phi_start}_{eta_end}_{phi_end}.png')
     plt.show()
+    plt.close()
+
 
 def plot_eta_phi_resolution(results_df, algo, event, particle, subdet):
     """
@@ -633,7 +641,7 @@ def plot_eta_phi_resolution(results_df, algo, event, particle, subdet):
     plt.xlabel('Phi Difference')
     plt.ylabel('Frequency')
     plt.title(f'Histogram of Phi Differences\n mu={mu_phi:.5f}, sigma={std_phi:.5f}')
-    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution.png')
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_8x8.png')
 
     plt.tight_layout()
     plt.show()
