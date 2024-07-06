@@ -130,7 +130,7 @@ def plot_byesplit_geom(grid_params, hexagon_proj, df_bin, output_path2):
 
             hex_x = row['hex_x']
             hex_y = row['hex_y']
-            #print("mippt", mip_pt)
+            #print("pt", mip_pt)
 
             hex_x_closed = hex_x + [hex_x[0]]
             hex_y_closed = hex_y + [hex_y[0]]   
@@ -271,7 +271,7 @@ def plot_layers(df_ts, ds_new):
         df_ts_layer = df_ts[df_ts['ts_layer'] == layer]
         ax.scatter(df_ts_layer['ts_x'], df_ts_layer['ts_y'], color='red', s=1, label='nuples data')
         for index, row in df_ts_layer.iterrows():
-            ax.annotate(f"U:{row['ts_wu']:.0f}, V:{row['ts_wv']:.0f}, E:{row['ts_mipPt']:.2f}", (row['ts_x'], row['ts_y']+4), fontsize=3, color='red')
+            ax.annotate(f"U:{row['ts_wu']:.0f}, V:{row['ts_wv']:.0f}, E:{row['ts_pt']:.2f}", (row['ts_x'], row['ts_y']+4), fontsize=3, color='red')
 
         ax.set_xlabel('x')
         ax.set_ylabel('y')
@@ -297,7 +297,7 @@ def plot_layers_sci(df_tc, sci_geom):
         tc_layer = df_tc[(df_tc['tc_layer'] == layer)] #& (df_tc['tc_cv'] >10 )
         ax.scatter(tc_layer['tc_x'], tc_layer['tc_y'], color='red', s=1, label='nuples data')
         for index, row in tc_layer.iterrows():
-            ax.annotate(f"U:{row['tc_cu']:.0f}, V:{row['tc_cv']:.0f}, E:{row['tc_mipPt']:.2f}", (row['tc_x'], row['tc_y']+4), fontsize=3, color='red')
+            ax.annotate(f"U:{row['tc_cu']:.0f}, V:{row['tc_cv']:.0f}, E:{row['tc_pt']:.2f}", (row['tc_x'], row['tc_y']+4), fontsize=3, color='red')
 
         ax.set_xlabel('x')
         ax.set_ylabel('y')
@@ -310,43 +310,43 @@ def plot_layers_sci(df_tc, sci_geom):
 def plot_baseline(df_baseline_proj, algo, event, particle):
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    # Dictionary to store total mipPt values for each bin
-    total_mipPt = {}
+    # Dictionary to store total pt values for each bin
+    total_pt = {}
 
     for index, row in df_baseline_proj.iterrows():
         eta_vertices = row['eta_vertices']
         phi_vertices = row['phi_vertices']
-        mipPt = row['mipPt']
+        pt = row['pt']
 
-        # Store total mipPt for the bin
+        # Store total pt for the bin
         bin_key = (eta_vertices, phi_vertices)
-        total_mipPt[bin_key] = mipPt
+        total_pt[bin_key] = pt
 
-    # Normalize total mipPt values for color mapping
-    max_mipPt = max(total_mipPt.values())
-    norm = Normalize(vmin=0, vmax=max_mipPt)
+    # Normalize total pt values for color mapping
+    max_pt = max(total_pt.values())
+    norm = Normalize(vmin=0, vmax=max_pt)
 
-    # Plot bins with total mipPt values
-    for bin_key, mipPt in total_mipPt.items():
+    # Plot bins with total pt values
+    for bin_key, pt in total_pt.items():
         eta_vertices, phi_vertices = bin_key
         poly = PolygonPlt(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')
         ax.add_patch(poly)
 
-        # Set color for the bin based on total mipPt value
-        color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(mipPt)
+        # Set color for the bin based on total pt value
+        color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(pt)
         poly.set_facecolor(color)
 
-        # Add text annotation with total mipPt value
+        # Add text annotation with total pt value
         text_x = np.mean(eta_vertices)
         text_y = np.mean(phi_vertices)
-        ax.text(text_x, text_y, f'{mipPt:.1f}', color='black', ha='center', va='center', fontsize=5)
+        ax.text(text_x, text_y, f'{pt:.1f}', color='black', ha='center', va='center', fontsize=5)
 
     # Add color bar
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
     sm = ScalarMappable(norm=norm, cmap='viridis')
-    sm.set_array(list(total_mipPt.values()))
+    sm.set_array(list(total_pt.values()))
     cbar = fig.colorbar(sm, cax=cax)
-    cbar.set_label('Total mipPt')
+    cbar.set_label('Total pt')
 
     # Set labels and title
     ax.set_xlabel('Eta')
@@ -383,19 +383,19 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
             poly.set_facecolor(color)
             #ax.add_patch(poly)
 
-    # Normalize total mipPt values for color mapping
-    max_mipPt = df_baseline_proj['mipPt'].max()
-    norm = Normalize(vmin=0, vmax=max_mipPt)
+    # Normalize total pt values for color mapping
+    max_pt = df_baseline_proj['pt'].max()
+    norm = Normalize(vmin=0, vmax=max_pt)
 
     # Plotting bins with colors and annotations
     for _, row in df_baseline_proj.iterrows():
 
         eta_vertices = row['eta_vertices']
         phi_vertices = row['phi_vertices']
-        mipPt = row['mipPt']
+        pt = row['pt']
 
         bin_key = (eta_vertices, phi_vertices)
-        color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(mipPt)
+        color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(pt)
 
         poly = PolygonPlt(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')#closed=True
         ax.add_patch(poly)
@@ -403,16 +403,16 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
 
         text_x = np.mean(eta_vertices)
         text_y = np.mean(phi_vertices)
-        ax.text(text_x, text_y, f'{mipPt:.1f}', color='black', ha='center', va='center', fontsize=5)
+        ax.text(text_x, text_y, f'{pt:.1f}', color='black', ha='center', va='center', fontsize=5)
         ax.text(data_gen['gen_eta'], data_gen['gen_phi'], f'.', color='red', ha='center', va='center', fontsize=5)
         #plt.scatter(data_gen['gen_eta'], data_gen['gen_phi'], marker='o', color='red')
 
     # Add color bar
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
     sm = ScalarMappable(norm=norm, cmap='viridis')
-    sm.set_array(df_baseline_proj['mipPt'])
+    sm.set_array(df_baseline_proj['pt'])
     cbar = fig.colorbar(sm, cax=cax)
-    cbar.set_label('Total mipPt')
+    cbar.set_label('Total pt')
 
     # Set labels and title
     ax.set_xlabel('Eta')
@@ -442,14 +442,14 @@ def plot_hex_bin_overlap_save(hdf5_filename, output_folder):
                     
                     plt.plot(hex_x_closed, hex_y_closed, color='blue')
 
-                    # Retrieve mippt value from the hexagon's group
-                    mippt = hex_group['ts_mipPt'][()]
+                    # Retrieve pt value from the hexagon's group
+                    pt = hex_group['ts_pt'][()]
                     
                     # Retrieve centroid coordinates from the hexagon's group
                     hex_center_x = hex_group['hex_x_centroid'][()]
                     hex_center_y = hex_group['hex_y_centroid'][()]
                     
-                    plt.text(hex_center_x, hex_center_y, f'mipPt: {mippt:.2f}', color='red', ha='center', va='center')
+                    plt.text(hex_center_x, hex_center_y, f'pt: {pt:.2f}', color='red', ha='center', va='center')
                     
                     for bin_key in hex_group.keys():
                         if bin_key.startswith('bin_'):
@@ -645,3 +645,24 @@ def plot_eta_phi_resolution(results_df, algo, event, particle, subdet):
 
     plt.tight_layout()
     plt.show()
+
+def plot_energy_ratio_histogram():
+        # Read the energy ratios from the file
+        pt_ratios = []
+        with open('pt_ratio_overlap.txt', 'r') as file:
+            for line in file:
+                try:
+                    ratio = float(line.strip())
+                    pt_ratios.append(ratio)
+                except ValueError:
+                    # Handle the case where the line is not a valid float
+                    continue
+
+        # Plot the histogram
+        plt.figure(figsize=(10, 6))
+        plt.hist(pt_ratios, bins=50, edgecolor='black', alpha=0.7)
+        plt.title('Histogram of pt Ratios')
+        plt.xlabel('pt Ratio')
+        plt.ylabel('Frequency')
+        plt.grid(True)
+        plt.show()
