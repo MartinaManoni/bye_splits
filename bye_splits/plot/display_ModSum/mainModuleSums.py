@@ -1,5 +1,5 @@
 # coding: utf-8
-# python3 mainModuleSums.py --event 5492 --algo baseline --particle photons --subdet CEE
+#python3 mainModuleSums.py --event 5492 --algo baseline --particle photons --subdet CEE
 #python3 mainModuleSums.py --event 11162 --geom V16 --algo baseline --particle photons --subdet CEE
 #python3 mainModuleSums.py --event 6413 --geom V11 --algo baseline --particle photons --subdet CEE
 _all_ = [ ]
@@ -10,10 +10,6 @@ import sys
 parent_dir = os.path.abspath(__file__ + 4 * '/..')
 sys.path.insert(0, parent_dir)
 
-#from dash import Dash, dcc, html, Input, Output, State, ctx
-#from dash.exceptions import PreventUpdate
-#from dash_bootstrap_templates import load_figure_template
-#import dash_bootstrap_components as dbc
 import pandas as pd
 import argparse
 import matplotlib.pyplot as plt
@@ -101,69 +97,6 @@ def main(subdet, event, particle, algo, n, geom):
     #process.save_bin_geo(towers_bins, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_with_arcs.geojson', f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_only_vertices.geojson')
     #process.save_bin_hex(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_CMSSW.geojson')
     #process.save_scint_mod_geo(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/scint_modules_geo.geojson')
-
-    #Dash app 
-    #FIXME --> needs to be updated, layer by layer plotting
-    '''
-    initial_df_grid = processingMS.Processing().create_grid_df(initial_kw)
-
-    app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
-
-    app.layout = html.Div([
-        html.H1("Interactive Grid Comparison"),
-        
-        dcc.Graph(id='grid-plot'),
-
-        html.Label("Adjust Binning Parameters:"),
-        
-        dcc.Slider(
-            id='phi-slider',
-            min=10,
-            max=50,
-            step=1,
-            marks={i: str(i) for i in [10, 20, 30, 40]},
-            value=initial_kw['NbinsPhi'],
-            tooltip={'placement': 'bottom'},
-            updatemode='mouseup'
-        ),
-
-        dcc.Slider(
-            id='eta-slider',
-            min=5,
-            max=20,
-            step=1,
-            marks={i: str(i) for i in [5, 10, 20]},
-            value=initial_kw['NbinsEta'],
-            tooltip={'placement': 'bottom'},
-            updatemode='mouseup'
-        )
-    ])
-
-    @app.callback(
-        Output('grid-plot', 'figure'),
-        [Input('phi-slider', 'value'),
-        Input('eta-slider', 'value')]
-    )
-    
-    def update_plot(n_phi, n_eta):
-        kw = {
-            'NbinsEta': n_eta,
-            'NbinsPhi': n_phi,
-            'MinPhi': -3.14159,
-            'MaxPhi': +3.14159,
-            'EtaMin': 1.5,
-            'EtaMax': 3
-        }
-
-        print("interactive plotting")
-        fig= plotMS.plot_single_event_proj(initial_kw, data, df_bin, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/grid_eta_1.5_3_20x72{algo}_{subdet}_{particle}_{event}.png', dpi=500)
-        return fig'''
-
-        #df_grid = plotMS.create_grid_df(kw)
-
-    #app.config.suppress_callback_exceptions = True
-    #app.run_server(debug=True, port=8051, host="0.0.0.0")
-
 
 if __name__ == '__main__':
     args = parse_arguments()
