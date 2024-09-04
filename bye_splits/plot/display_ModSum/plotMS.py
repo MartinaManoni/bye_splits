@@ -666,3 +666,108 @@ def plot_energy_ratio_histogram():
         plt.ylabel('Frequency')
         plt.grid(True)
         plt.show()
+
+#checks V16 integration
+def plot_layer_hexagons(df, layer, x1,y1):
+    group = df[df['ts_layer'] == layer]
+    if group.empty:
+        print(f"No data for layer {layer}")
+        return
+
+    fig, ax = plt.subplots()
+    cmap = plt.get_cmap('viridis')
+    norm = plt.Normalize(group['ts_pt'].min(), group['ts_pt'].max())
+
+    for _, row in group.iterrows():
+        hex_x, hex_y = row['hex_x'], row['hex_y']
+        polygon = Polygon(zip(hex_x, hex_y))
+        color = cmap(norm(row['ts_pt']))
+        x, y = polygon.exterior.xy
+        ax.fill(x, y, color=color)
+
+    ax.plot(x1, y1,'rx')
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    fig.colorbar(sm, ax=ax, label='ts_pt')
+    ax.set_title(f'Layer {layer}')
+    print(x1, y1)
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.show()
+
+
+def plot_towers_xy_grid(df_baseline_proj, data_gen, algo, event, particle, subdet):
+    print("plotting xy_towers")
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    print("DATA GEN", data_gen)
+    # Plotting the grid of bins
+    initial_kw = {
+        'NbinsEta': 20,
+        'NbinsPhi': 72,
+        'MinPhi': -3.14159,
+        'MaxPhi': +3.14159,
+        'EtaMin': 1.305,
+        'EtaMax': 3.045
+    }
+    eta_bins = np.linspace(initial_kw['EtaMin'], initial_kw['EtaMax'], initial_kw['NbinsEta'] + 1)
+    phi_bins = np.linspace(initial_kw['MinPhi'], initial_kw['MaxPhi'], initial_kw['NbinsPhi'] + 1)
+
+    # Normalize total pt values for color mapping
+    max_pt = df_baseline_proj['pt'].max()
+    norm = Normalize(vmin=0, vmax=max_pt)
+
+    # Plotting bins with colors and annotations
+    for _, row in df_baseline_proj.iterrows():
+        eta_vertices = row['eta_vertices']
+        phi_vertices = row['phi_vertices']
+        pt = row['pt']
+
+        x_vertices, y_vertices = [], []
+        for eta, phi in zip(eta_vertices, phi_vertices):
+            x, y = sph2cart(eta, phi)
+            x_vertices.append(x)
+            y_vertices.append(y)
+
+       #color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(pt)
+        if pt > 0:
+            color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(pt)
+        else:
+            color = 'none'
+        poly = PolygonPlt(np.column_stack((x_vertices, y_vertices)), closed=True, edgecolor='black')#edgecolor='black'
+        poly.set_facecolor(color)
+        ax.add_patch(poly)
+
+        text_x = np.mean(x_vertices)
+        text_y = np.mean(y_vertices)
+        #ax.text(text_x, text_y, f'{pt:.1f}', color='black', ha='center', va='center', fontsize=5)
+
+    # Plot data_gen point
+    gen_x, gen_y = sph2cart(data_gen['gen_eta'], data_gen['gen_phi'])
+    ax.text(gen_x, gen_y, f'x', color='red', ha='center', va='center', fontsize=9, fontweight='bold')
+
+    # Add color bar
+    cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
+    sm = ScalarMappable(norm=norm, cmap='viridis')
+    sm.set_array(df_baseline_proj['pt'])
+    cbar = fig.colorbar(sm, cax=cax)
+    cbar.set_label('Total pT [GeV]')
+
+    # Set labels and title
+    ax.set_xlabel('X poistion [cm]')
+    ax.set_ylabel('Y position [cm]')
+    ax.set_title(f'{algo}_{particle}_{event}')
+
+    ax.set_aspect('equal')
+    ax.autoscale()
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_xy_towers.png', dpi=700)  # Save the plot as an image
+    plt.show()
+
+def sph2cart(eta, phi, z=322.):
+        ''' Useful conversion: Spherical coordinates to cartesian coordinates (x, y)  '''
+        theta = 2*np.arctan(np.exp(-eta))
+        r = z / np.cos(theta)
+        x = r * np.sin(theta) * np.cos(phi)
+        y = r * np.sin(theta) * np.sin(phi)
+        return x, y
