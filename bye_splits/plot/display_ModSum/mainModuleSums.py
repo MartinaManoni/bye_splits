@@ -32,7 +32,7 @@ def parse_arguments():
 
     parser.add_argument("--subdet", default='all_subdet', help="Select subdetector (CEE, CEH, all_subdet)")
     parser.add_argument("--event", default='5492', help="Select event number or -1 for all events")
-    parser.add_argument("--n", type=int, default=10, help="Process the first n events")
+    parser.add_argument("--n", type=int, default=None, help="Process the first n events")
     parser.add_argument("--algo", default='8towers', help="Select algorithm (baseline, area_overlap, 8towers)")
     parser.add_argument("--particle", default='photons', help="Select particle type (photons or pions)")
     parser.add_argument("--geom", default='V11', help="Select the CMSSW geometry (V11 or V16)")
@@ -59,12 +59,12 @@ def main(subdet, event, particle, algo, n, geom):
         'SinglePhotonPU0V16/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5'
         )
 
-    data_gen = process.get_genpart_data(file_path, event)
-    print("Dataframe columns",data_gen['event'])
-
     # Method that retrieves events and process the data with the geometry
-    data = process.get_data_new(data_gen,event,n, geom)
+    data, events_to_process = process.get_data_new(event,n, geom)
     print("DATA", data.columns) #qui mantengo ancora l'informazione sull'evento!
+
+    data_gen = process.get_genpart_data(file_path, event, events_to_process, n)
+    print("Dataframe columns",data_gen['event'])
 
     #helper.read_hdf5_structure(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/photons_manoni/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5')
     #helper.read_all_block0_values(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/photons_manoni/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5')
@@ -96,8 +96,8 @@ def main(subdet, event, particle, algo, n, geom):
     #plotMS.plot_full_geom(bins_data, hexagons_data, scint_data, 'plot_layers', plot_type='all')
 
     towers_bins = process.create_bin_df_new(initial_kw, geom)
-    print("towers bins", towers_bins)
-    print("towers bins col", towers_bins.columns)
+    #print("towers bins", towers_bins)
+    #print("towers bins col", towers_bins.columns)
     process.ModSumToTowers(initial_kw, data , subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename, data_gen, towers_bins)
 
     #geometry.save_bin_geo(towers_bins, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_with_arcs.geojson', f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_only_vertices.geojson')

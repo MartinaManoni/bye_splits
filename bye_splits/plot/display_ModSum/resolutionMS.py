@@ -20,7 +20,9 @@ class Resolution():
         particle_eta = genpart_df['gen_eta'].iloc[0]
         particle_phi = genpart_df['gen_phi'].iloc[0]
         event_number = genpart_df['event'].iloc[0]
+        print( particle_eta,particle_phi, event_number)
         print("gen part dataframe",  genpart_df)
+        print("baseline_df dataframe",  baseline_df)
 
         # Find the bin where the generated particle is located
         baseline_df = baseline_df.copy()
@@ -179,16 +181,16 @@ class Resolution():
         all_results = []
 
         unique_events = df['event'].unique()
+        print("unique_events", unique_events)
 
         for event in unique_events:
+            print("event", event)
             
             # Extract the DataFrame for the current event
             event_df = df[df['event'] == event]
 
-            if len(unique_events) ==1: 
-                event_genpart_df = genpart_df
-            else: 
-                event_genpart_df = genpart_df[genpart_df['event'] == event]
+            event_genpart_df = genpart_df[genpart_df['event'] == event]
+            print("event_genpart_df", event_genpart_df)
 
             # Apply the find_particle_bin_and_evaluate_windows function
             subwindow_energies, eta_diff, phi_diff = self.find_particle_bin_and_evaluate_windows(event_df, event_genpart_df, window_size, subwindow_size)

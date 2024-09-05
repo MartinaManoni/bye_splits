@@ -67,7 +67,7 @@ class Processing():
             print("Unrecognized geom value. Please provide 'V11' or 'V16'.")
             #"/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/new_OKAY/fill_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5"
 
-    def get_data_new(self, data_gen, event=None, n=None, geom=None):
+    def get_data_new(self, event=None, n=None, geom=None):
         # Check if the HDF5 file exists
         self.filestore(geom)
         if not os.path.exists(self.filename):
@@ -80,9 +80,9 @@ class Processing():
 
         # If no event is specified, choose a random one
         if event is None:
-            event = random.choice(self.list_events)
-            print(f"Selected random event: {event}")
-            processed_event_df = self.get_event(event,geom)
+            events_to_process = random.choice(self.list_events)
+            print(f"Selected random event: {events_to_process}")
+            processed_event_df = self.get_event(events_to_process,geom)
 
         elif event == '-1':
             events_to_process = self.list_events
@@ -90,17 +90,17 @@ class Processing():
                 print("n", n)
                 events_to_process = events_to_process[:n]
             print(f"Processing events: {events_to_process}")
-            processed_event_df = self.get_allevents(events_to_process)
+            processed_event_df = self.get_allevents(events_to_process, geom)
 
         else:
             print(f"Selected event: {event}")
             # If the specified event is not in the list, raise an exception
             if str(event) not in self.list_events:
                 raise ValueError(f"Event {event} not found in the HDF5 file.")
-            processed_event_df = self.get_event(event,geom,data_gen)
-        return processed_event_df
+            processed_event_df = self.get_event(event,geom)
+        return processed_event_df, events_to_process
 
-    def get_event(self, event, geom, data_gen):
+    def get_event(self, event, geom):
         with h5py.File(self.filename, 'r') as file:
             for key in file.keys():
                 if event in key and 'ts' in key:
@@ -117,13 +117,13 @@ class Processing():
                         silicon_df= self.process_event(df_ts)
                         print("silicon_df_proc V11", silicon_df.columns)
                     if geom == 'V16':
-                        silicon_df= self.process_event_V16(df_ts, data_gen)
+                        silicon_df= self.process_event_V16(df_ts)
                         print("silicon_df_V16", silicon_df.columns)
                         print("silicon_df_V16", silicon_df)
 
                     return silicon_df
     
-    def get_allevents(self, events_to_process):
+    def get_allevents(self, events_to_process, geom):
         all_ts_event_dfs = []
         all_tc_event_dfs = []
 
@@ -151,10 +151,17 @@ class Processing():
         print("tc data dataframe", combined_tc_df.columns)
         
         # Process the combined ts DataFrame
-        processed_combined_ts_df = self.process_event(combined_ts_df) #FIXME - Temporary adding tc data (combined_ts_df,combined_tc_df)
+        if geom == 'V11':
+            processed_combined_ts_df = self.process_event(combined_ts_df) #FIXME - Temporary adding tc data (combined_ts_df,combined_tc_df)
+        if geom == 'V16': 
+            print("processing all events V16")
+            processed_combined_ts_df = self.process_event_V16(combined_ts_df)
+            lenght = len(processed_combined_ts_df)
+            print("lenght df",lenght)
         return processed_combined_ts_df
     
-    def get_genpart_data(self, file_path, block0_value, group_name='df'):
+    def get_genpart_data(self, file_path, block0_value, events_to_process, n, group_name='df'):
+        print("events_to_process QUI", events_to_process)
         block1_data = []
         events = []
         print(block0_value)
@@ -168,9 +175,20 @@ class Processing():
                     block1_items = [item.decode() for item in group['block1_items']]
                     block1_values = group['block1_values']
                     if block0_value == '-1':
-                        for idx, value in enumerate(block0_values):
-                            block1_data.append(block1_values[idx])
-                            events.append(value)
+                        if n is not None:
+                            matching_indices = [i for i, v in enumerate(block0_values) if str(v) in events_to_process]
+                            print("block0_values inside", block0_values)
+                            for idx in matching_indices:
+                                block1_data.append(block1_values[idx])
+                                events.append(block0_values[idx])
+                            '''for idx, value in enumerate(events_to_process):
+                                block1_data.append(block1_values[idx])
+                                events.append(value)'''
+                        else:
+                            # Otherwise, select all values
+                            for idx, value in enumerate(block0_values):
+                                block1_data.append(block1_values[idx])
+                                events.append(value)
                     elif int(block0_value) in block0_values:
                         idx = block0_values.tolist().index(int(block0_value))
                         block1_data.append(block1_values[idx])
@@ -181,7 +199,7 @@ class Processing():
                     # Create DataFrame and include event numbers as a column
                     df = pd.DataFrame(block1_data, columns=block1_items)
                     df['event'] = events
-
+                    print("GEN PART DF", df)
                     return df
                 else:
                     print("Error: 'block0_values', 'block1_items', or 'block1_values' not found in group {}.".format(group_name))
@@ -241,11 +259,11 @@ class Processing():
 
         return shifted_hex_df
 
-    def process_event_V16(self, df_ts, data_gen):
-        print("data gen", data_gen)
-
-        x,y = self.sph2cart(data_gen['gen_eta'], data_gen['gen_phi'], z=322.)
+    def process_event_V16(self, df_ts):
         print("Process events V16 ...")
+        #print("data gen", data_gen)
+
+        #x,y = self.sph2cart(data_gen['gen_eta'], data_gen['gen_phi'], z=322.)
         print("Filled data ts columns V16", df_ts.columns)
 
         # Load the GeoJSON data
@@ -285,7 +303,7 @@ class Processing():
         # Merge the DataFrames
         merged_df = pd.merge(left=df_ts, right=df_geo, how='inner', on=['ts_layer', 'ts_wu', 'ts_wv'])
         merged_df=merged_df[merged_df['ts_mipPt'] > 0.5]
-        plotMS.plot_layer_hexagons(merged_df, 11, x,y)
+        #plotMS.plot_layer_hexagons(merged_df, 11, x,y)
 
         return merged_df
 
@@ -486,15 +504,15 @@ class Processing():
             # Filter dataframe for the current layer based on the conditions
             if (layer <= 29 and layer % 2 != 0) or (layer >= 30 and layer <= max_layer):
                 # Filter dataframe for the current layer
-                print("here printing ds geom ",self.ds_geom['si'])
-                print("here printing ds geom col",self.ds_geom['si'].columns)
+                #print("here printing ds geom ",self.ds_geom['si'])
+                #print("here printing ds geom col",self.ds_geom['si'].columns)
                 layer_df = self.ds_geom['si'][self.ds_geom['si']['ts_layer'] == layer].copy()
                 
                 layer_df['z_appr'] = layer_df['z'] #since for V16 geometry we dont have the z position info, we assume to be the same as V11 at the moment #FIXME
                 # Extract unique 'z' values for the current layer
                 unique_z_values = layer_df['z_appr'].unique()[:1]   #select only the first entry cause there are multiple z values for approximation reasons
                 unique_l_values = layer_df['ts_layer'].unique()
-                print("unique_l_values", unique_l_values)
+                #print("unique_l_values", unique_l_values)
                 layer_bins = []
 
                 # Calculate the bin widths for eta and phi
@@ -596,11 +614,11 @@ class Processing():
     def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename, data_gen, bins_df):
         print('Mod sum to towers')
 
-        print("data", data.columns)
-        print("data gen", data_gen.columns)
+        #print("data", data.columns)
+        #print("data gen", data_gen.columns)
 
-        print("ts_en", "gen_pt")
-        print(data['ts_pt'].sum(), data_gen['gen_pt'])
+        #print("ts_en", "gen_pt")
+        #print(data['ts_pt'].sum(), data_gen['gen_pt'])
 
         #self.check_pt(data, data_gen)
         #print("data pt TS", data['ts_pt'].sum())
@@ -612,7 +630,7 @@ class Processing():
         #print("OVERLAP DATA INPUT columns ", overlap_data.columns)
 
         hexagon_info_df = self.eval_hex_bin_overlap_OK(data, bin_geojson_filename)
-        print("QUIIIIII, hexagon_info_df", hexagon_info_df)
+        #print("QUIIIIII, hexagon_info_df", hexagon_info_df)
         #print("QUIIIIII, hexagon_info_df COLUMNS", hexagon_info_df.columns)
 
         if algo == 'baseline':
@@ -620,7 +638,6 @@ class Processing():
             
         elif algo == 'area_overlap':
             df_algo = self.algorithms.area_overlap_by_event(hexagon_info_df, subdet)
-            print("df_algo", df_algo.columns)
 
         elif algo == '8towers':
             df_algo = self.algorithms.area_overlap_8Towers_by_event(hexagon_info_df, subdet)
@@ -630,16 +647,16 @@ class Processing():
 
         df , df_sum = self.apply_update_to_each_event(df_algo, bins_df)
 
-        print("Eta/Phi resolution evaluation")
+        print("Eta/Phi resolution evaluation...")
         df_resolution = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, window_size=8, subwindow_size=5)
         self.resolution.save_eta_phi_differences(df_resolution, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_hadd_123_subw_5x5_OK.txt')
         #plotMS.plot_energy_ratio_histogram()
         #plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
-        print("data_gen", data_gen.columns)
-        print("df_sum", df_sum.columns)
-        print("event", event)
-        plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet)
-        plotMS.plot_towers_xy_grid(df_sum, data_gen, algo, event, particle, subdet)
+        #print("data_gen", data_gen.columns)
+        #print("df_sum", df_sum.columns)
+        #print("event", event)
+        #plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet)
+        #plotMS.plot_towers_xy_grid(df_sum, data_gen, algo, event, particle, subdet)
 
     def compute_overlap(self, hex_polygon, hex_centroid, hex_properties, bins_layer):
         hex_centroid_x, hex_centroid_y = hex_centroid.x, hex_centroid.y

@@ -358,10 +358,12 @@ def plot_baseline(df_baseline_proj, algo, event, particle):
     plt.show()
 
 def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, subdet):
+    #this works only for a single event : need to put options to gen data to take only the n events that coprrespond to one from data
     print("plotting eta_phi_towers")
     fig, ax = plt.subplots(figsize=(10, 8))
 
     print ("DATA GEN", data_gen)
+    print ("DATA ", df_baseline_proj)
     # Plotting the grid of bins
     initial_kw = {
         'NbinsEta': 20,
@@ -404,9 +406,15 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
         text_x = np.mean(eta_vertices)
         text_y = np.mean(phi_vertices)
         ax.text(text_x, text_y, f'{pt:.1f}', color='black', ha='center', va='center', fontsize=5)
-        ax.text(data_gen['gen_eta'], data_gen['gen_phi'], f'.', color='red', ha='center', va='center', fontsize=5)
+        #ax.text(data_gen['gen_eta'], data_gen['gen_phi'], f'.', color='red', ha='center', va='center', fontsize=5)
         #plt.scatter(data_gen['gen_eta'], data_gen['gen_phi'], marker='o', color='red')
-
+    # Plot gen data points (handle multiple points if data_gen has more than one row)
+    if len(data_gen) > 1:
+        for idx, row in data_gen.iterrows():
+            ax.text(row['gen_eta'], row['gen_phi'], '.', color='red', ha='center', va='center', fontsize=8)
+    else:
+        ax.text(data_gen['gen_eta'].values[0], data_gen['gen_phi'].values[0], '.', color='red', ha='center', va='center', fontsize=8)
+        
     # Add color bar
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
     sm = ScalarMappable(norm=norm, cmap='viridis')
@@ -744,8 +752,11 @@ def plot_towers_xy_grid(df_baseline_proj, data_gen, algo, event, particle, subde
         #ax.text(text_x, text_y, f'{pt:.1f}', color='black', ha='center', va='center', fontsize=5)
 
     # Plot data_gen point
-    gen_x, gen_y = sph2cart(data_gen['gen_eta'], data_gen['gen_phi'])
-    ax.text(gen_x, gen_y, f'x', color='red', ha='center', va='center', fontsize=9, fontweight='bold')
+    for _, row in data_gen.iterrows():
+        gen_x, gen_y = sph2cart(row['gen_eta'], row['gen_phi'])
+        ax.text(gen_x, gen_y, 'x', color='red', ha='center', va='center', fontsize=9, fontweight='bold')
+    #gen_x, gen_y = sph2cart(data_gen['gen_eta'], data_gen['gen_phi'])
+    #ax.text(gen_x, gen_y, f'x', color='red', ha='center', va='center', fontsize=9, fontweight='bold')
 
     # Add color bar
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
