@@ -7,9 +7,7 @@ import sys
 parent_dir = os.path.abspath(__file__ + 3 * '/..')
 sys.path.insert(0, parent_dir)
 
-#from dash import dcc, html
 import json
-#import dash_daq as daq
 import h5py
 import re
 import plotly.express.colors as px
@@ -31,6 +29,9 @@ import numpy as np
 import yaml
 import processingMS
 import plotMS
+import algosMS
+import resolutionMS
+import geometryMS
 import matplotlib
 from scipy.spatial.distance import cdist
 from shapely import geometry as geom
@@ -40,7 +41,6 @@ from matplotlib.patches import Polygon as matPoly
 from matplotlib.collections import PatchCollection
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import cpu_count
-#matplotlib.use("TkAgg")
 
 class Processing():
     def __init__(self):
@@ -50,6 +50,9 @@ class Processing():
         self.ds_geom = GeometryData(reprocess=False, logger=log, library='plotly').provide()
         self.filename = None
         self.list_events = None
+        self.algorithms = algosMS.Algorithms()
+        self.resolution = resolutionMS.Resolution()
+        self.geometry= geometryMS.Geometry()
 
     def random_event(self, f):
         return random.choice(self.list_events)
@@ -62,7 +65,7 @@ class Processing():
         else:
             self.filename = None  # Or raise an error if geom is required
             print("Unrecognized geom value. Please provide 'V11' or 'V16'.")
-#"/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/new_OKAY/fill_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5"
+            #"/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/new_OKAY/fill_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5"
 
     def get_data_new(self, data_gen, event=None, n=None, geom=None):
         # Check if the HDF5 file exists
@@ -151,33 +154,6 @@ class Processing():
         processed_combined_ts_df = self.process_event(combined_ts_df) #FIXME - Temporary adding tc data (combined_ts_df,combined_tc_df)
         return processed_combined_ts_df
     
-    def read_hdf5_structure(self,file_path, group_name='df', indent=0):
-
-        def _print_group_structure(group, indent):
-            for name in group:
-                print(" " * indent + name)
-                if isinstance(group[name], h5py.Group):
-                    _print_group_structure(group[name], indent + 2)
-
-        with h5py.File(file_path, 'r') as f:
-            if group_name in f:
-                group = f[group_name]
-                _print_group_structure(group, indent)
-
-    def read_all_block0_values(self,file_path, group_name='df'):
-        with h5py.File(file_path, 'r') as f:
-            if group_name in f:
-                group = f[group_name]
-                if 'block0_values' in group:
-                    block0_values = group['block0_values']
-                    print("Values in 'block0_values':")
-                    for row in block0_values:
-                        print(row)
-                else:
-                    print("Error: 'block0_values' not found in group {}.".format(group_name))
-            else:
-                print("Error: Group '{}' not found in HDF5 file.".format(group_name))
-    
     def get_genpart_data(self, file_path, block0_value, group_name='df'):
         block1_data = []
         events = []
@@ -212,17 +188,6 @@ class Processing():
             else:
                 print("Error: Group '{}' not found in HDF5 file.".format(group_name))
 
-
-    def store_event(self, path, data):
-        if isinstance(data, dict):
-            for key, item in data.items():
-                if isinstance(item, pd.DataFrame):
-                    item.to_hdf(self.filename, path + str(key))
-                else:
-                    raise ValueError('Cannot save %s type'%type(item))
-        else:
-            data.to_hdf(self.filename, path)
-
     def process_event(self, df_ts):
         #(self, df_ts, df_tc)
         print("Process events ...")
@@ -245,10 +210,6 @@ class Processing():
 
         #SILICON
         print("GEOMETRY silicon columns", self.ds_geom['si'].columns)
-        #print("GEO scint columns", self.ds_geom['sci'].columns)
-        #mask= self.ds_geom['sci']['tc_layer']== 42
-        #print("GEO scint columns", self.ds_geom['sci'][mask])
-        
         ds_si_geo = self.ds_geom['si'].drop_duplicates(subset=['ts_layer', 'ts_wu', 'ts_wv'], keep='first')
 
         #plotMS.plot_layers(df_ts, ds_new)
@@ -266,14 +227,13 @@ class Processing():
         #Adding scintillator modules to scintillator geometry - reproducing what is done at the moment in CMSSW:
         #https://github.com/hgc-tpg/cmssw/blob/hgc-tpg-devel-CMSSW_14_0_0_pre1/L1Trigger/L1THGCal/plugins/geometries/HGCalTriggerGeometryV9Imp3.cc#L989
 
-        self.add_scint_modules_var(self.ds_geom['sci'])
-        #scint_mod_geom = self.create_scint_mod_geometry(self.ds_geom['sci'])
+        self.geometry.add_scint_modules_var(self.ds_geom['sci'])
+        #scint_mod_geom = self.geometry.create_scint_mod_geometry(self.ds_geom['sci'])
         #plotMS.plot_scint_tiles(self.ds_geom['sci'])
         #print("Scintillator geometry", scint_mod_geom.columns)
 
         '''scintillator_df = pd.merge(left=df_tc, right=self.ds_geom['sci'], how='inner', #FIXME
                                            on=['tc_layer', 'tc_wu', 'tc_cu', 'tc_cv'])'''
-
         #print("shifted_hex_df")
         #print(shifted_hex_df[['hex_x', 'hex_y']])
         #print("\nsilicon_df")
@@ -329,114 +289,6 @@ class Processing():
 
         return merged_df
 
-    def add_scint_modules_var(self, df):
-        #Adding to the dataframe ieta (ts_ieta) and iphi (ts_iphi) identifier for scintillator modules
-        hSc_tcs_per_module_phi = 4
-        hSc_back_layers_split = 8
-        hSc_front_layers_split = 12
-        hSc_layer_for_split = 40
-
-        df['ts_iphi'] = (df['tc_cv'] - 1) // hSc_tcs_per_module_phi
-
-        split = hSc_front_layers_split
-        if df['tc_layer'].iloc[0] > hSc_layer_for_split:
-            split = hSc_back_layers_split
-
-        df['ts_ieta'] = df.apply(lambda row: 0 if row['tc_cu'] <= split else 1, axis=1)
-
-    def create_scint_mod_geometry(self, df):
-        # Group DataFrame by ts_ieta, ts_iphi, and tc_layer
-        grouped = df.groupby(['ts_ieta', 'ts_iphi', 'tc_layer'])
-        merged_geometries = []
-
-        for (ts_ieta, ts_iphi, tc_layer), group in grouped:
-            # Create a list to store individual diamond polygons
-            diamond_polygons = []
-            # Iterate over rows in the group and create Shapely Polygon objects
-            for _, row in group.iterrows():
-                # Define vertices of the diamond polygon
-                vertices = [
-                    (row['diamond_x'][0], row['diamond_y'][0]),
-                    (row['diamond_x'][1], row['diamond_y'][1]),
-                    (row['diamond_x'][2], row['diamond_y'][2]),
-                    (row['diamond_x'][3], row['diamond_y'][3]),
-                ]
-                # Create a Polygon object
-                polygon = Polygon(vertices)
-                # Add polygon to the list
-                diamond_polygons.append(polygon)
-
-            # Extract coordinates of all sub-polygons directly from the diamond polygons
-            all_coords = [list(polygon.exterior.coords) for polygon in diamond_polygons]
-
-            # Flatten the list of coordinates
-            flat_coords = [coord for sublist in all_coords for coord in sublist]
-
-            # Find min and max x and y coordinates for all sub-polygons
-            x_coords, y_coords = zip(*flat_coords)
-            x_min, x_max = min(x_coords), max(x_coords)
-            y_min, y_max = min(y_coords), max(y_coords)
-
-            # Find the corresponding y-coordinate or x-coordinate #FIXME
-            Y_x_min = self.find_corresponding_y(x_min, all_coords)
-            Y_x_max = self.find_corresponding_y(x_max, all_coords)
-            X_y_min = self.find_corresponding_x(y_min, all_coords)
-            X_y_max = self.find_corresponding_x(y_max, all_coords)
-
-            ordered_vertices = self.order_vertices_clockwise([(x_min, Y_x_min), (x_max, Y_x_max), (X_y_max, y_max), (X_y_min, y_min)])
-
-            # Check for repeated vertices
-            #if len(set(map(tuple, ordered_vertices))) < len(ordered_vertices):
-                #print(f"Repeated vertices found in Layer {tc_layer}: {ordered_vertices}")
-
-            # Append the result to the new DataFrame
-            merged_geometries.append({'ts_ieta': ts_ieta, 'ts_iphi': ts_iphi, 'tc_layer': tc_layer,
-                                  'geometry': diamond_polygons, 'vertices_clockwise': ordered_vertices})
-
-        merged_df = pd.DataFrame(merged_geometries)
-
-        self.save_scint_mod_geo(merged_df, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/scint_modules_geo.geojson')
-
-        return merged_df
-
-    def order_vertices_clockwise(self, vertices):
-        centroid = Polygon(vertices).centroid
-        centroid_x, centroid_y = centroid.x, centroid.y
-        # Convert vertices list to NumPy array
-        vertices_array = np.array(vertices)
-        # Calculate angles with respect to centroid
-        angles = np.arctan2(vertices_array[:, 1] - centroid_y, vertices_array[:, 0] - centroid_x)
-        # Sort vertices based on angles
-        sorted_indices = np.argsort(angles)
-        ordered_vertices = vertices_array[sorted_indices]
-
-        return ordered_vertices.tolist()
-
-    def find_corresponding_y(self, x, all_coords):
-        closest_y = None
-        min_distance = float('inf')
-        for coord in all_coords:
-            for x_val, y_val in coord:
-                if x_val == x:
-                    distance = abs(y_val)
-                    if distance < min_distance:
-                        min_distance = distance
-                        closest_y = y_val
-        return closest_y
-
-    def find_corresponding_x(self, y, all_coords):
-        closest_x = None
-        min_distance = float('inf')
-        for coord in all_coords:
-            for x_val, y_val in coord:
-                if y_val == y:
-                    distance = abs(x_val)
-                    if distance < min_distance:
-                        min_distance = distance
-                        closest_x = x_val
-        return closest_x
-
-
     def shift_hex_values(self, silicon_df_proc, df_geom, df_ts):
         '''shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW),
            in order to maintain as center of the hexagon the orginal ts_x/ts_y. 
@@ -480,82 +332,6 @@ class Processing():
         #plotMS.plot_shifted_modules(silicon_df_proc, shifted_df, df_geom, df_ts, layer_number)
         
         return shifted_df    
-    
-    def create_bin_polygon(self, bin_x, bin_y, bin_eta, bin_phi, center):
-        center_x = np.mean(bin_x)
-        center_y = np.mean(bin_y)
-        arcs = []
-        #lines = []
-
-        #find index of points with same eta but different phi
-        idx_pairs = []
-        idx_pairs_no = []
-        for i in range(4):
-            for j in range(i + 1, 4):
-                if bin_eta[i] == bin_eta[j] and bin_phi[i] != bin_phi[j]:
-                    idx_pairs.append((i, j))
-                if bin_eta[i] != bin_eta[j] and bin_phi[i] == bin_phi[j]:
-                    idx_pairs_no.append((i, j))
-
-        for start_idx, end_idx in idx_pairs:
-            arc = self.create_arc(bin_x[start_idx], bin_y[start_idx], bin_x[end_idx], bin_y[end_idx], center)
-            arcs.append(arc)
-
-        #for start_idx, end_idx in idx_pairs_no:
-           # straight_lines = geom.LineString([[bin_x[start_idx], bin_y[start_idx]], [bin_x[end_idx], bin_y[end_idx]]])
-           # lines.append(straight_lines)  
-
-        # Combine arcs and lines to form the polygon
-        points = []
-        for arc in arcs:
-            points.extend(arc.coords[:])  
-
-        # Arrange the points in clockwise order around the center
-        # (Note the role reversal: the "y-coordinate" is the first function parameter, the "x-coordinate" is the second.)
-        points_clockwise = sorted(points, key=lambda p: np.arctan2(p[1] - center_y, p[0] - center_x))
-
-        # Remove duplicate points while preserving order
-        unique_points = []
-        prev_point = None
-        for point in points_clockwise:
-            if point != prev_point:
-                unique_points.append(point)
-                prev_point = point
-
-        # Ensure that the polygon is closed
-        if unique_points[0] != unique_points[-1]:
-            unique_points.append(unique_points[0])
-
-        #print("unique points", unique_points)    
-
-        polygon = geom.Polygon(unique_points)
-        #self.plot_polygon(polygon)
-        return polygon
-    
-    def plot_polygon(self,polygon):
-        x, y = polygon.exterior.xy
-        plt.plot(x, y)
-        plt.fill(x, y, alpha=0.5)
-        plt.xlabel('X')
-        plt.ylabel('Y')
-        plt.title('Polygon')
-        plt.gca().set_aspect('equal', adjustable='box')
-        plt.grid(True)
-        plt.show()
-
-    def plot_polygons(self, polygons):
-        plt.figure()
-        for polygon in polygons[:40]:
-            x, y = polygon.exterior.xy
-            plt.plot(x, y)
-            plt.fill(x, y, alpha=0.5)
-        plt.xlabel('X')
-        plt.ylabel('Y')
-        plt.title('Polygons')
-        plt.gca().set_aspect('equal', adjustable='box')
-        plt.grid(True)
-        plt.show()
-    
 
     def create_arc(self, x_start, y_start, x_stop, y_stop, center):
         # Calculate radius based on the distance from the center to the starting point
@@ -657,293 +433,6 @@ class Processing():
                 'bins_overlapping': bins_overlapping
             })
         return results
-
-    #ALGORITHMS
-
-    def baseline_by_event(self, df_hexagon_info, subdet):
-        print("Baseline OKAY algorithm ...")
-        start_time = time.time()
-        
-        # Initialize a list to store the results for all events
-        all_event_rows = []
-
-        # Get unique event indices
-        unique_events = df_hexagon_info.index.get_level_values('event').unique()
-
-        # Iterate over each event
-        for event in unique_events:
-            print(f"Processing event {event}...")
-            
-            # Extract the DataFrame for the current event
-            df_event = df_hexagon_info.loc[event]
-
-            # Initialize a dictionary to store the summed pt for each bin by layer for the current event
-            bin_pt_by_layer = {}
-
-            # Get unique layer indices for the current event
-            unique_layers = df_event.index.get_level_values('layer').unique()
-
-            # Filter layers if required
-            if subdet == 'CEE':
-                print("CEE subdet ...")
-                unique_layers = unique_layers[unique_layers < 29]
-            elif subdet == 'CEH':
-                print("CEH subdet ...")
-                unique_layers = unique_layers[unique_layers >= 29]
-            else:
-                # No layer selection
-                print("CEE + CEH ...")
-                unique_layers = unique_layers
-
-            # Iterate over each layer for the current event
-            for layer_idx in unique_layers:
-                layer_df = df_event.loc[df_event.index.get_level_values('layer') == layer_idx]
-                #print("layer_df", layer_df )
-
-                bin_pt = {}  # Initialize pt for bins in the current layer
-
-                # Iterate over each hexagon in the layer
-                for hex_row in layer_df.itertuples():
-                    if not hex_row.bins_overlapping: # Skip hexagons with no overlapping bins
-                        continue
-
-                    # Prepare array of hexagon eta/phi centroids
-                    # Prepare array of hexagon eta/phi centroids
-                    hex_centroid = np.array([hex_row.hex_eta_centroid, hex_row.hex_phi_centroid])
-
-                    # Prepare array of bin eta/phi centroids and pt
-                    bin_centroids = []
-                    bin_pts = []
-
-                    for bin_info in hex_row.bins_overlapping:
-                        bin_eta_centroid = bin_info['centroid_eta']
-                        bin_phi_centroid = bin_info['centroid_phi']
-                        bin_centroid = np.array([bin_eta_centroid, bin_phi_centroid])
-                        bin_centroids.append(bin_centroid)
-
-                        # Directly use the pt of the hexagon for the nearest bin
-                        #bin_pts.append(hex_row.ts_pt)
-                        bin_pts.append(hex_row.ts_pt)
-
-                    bin_centroids = np.array(bin_centroids)
-
-                    # Compute pairwise distances between hexagon and bins
-                    distances = np.linalg.norm(bin_centroids - hex_centroid, axis=1)
-
-                    # Find the nearest bin for the current hexagon
-                    nearest_bin_idx = np.argmin(distances)
-
-                    # Assign pt of hexagons to the nearest bins
-                    nearest_bin_info = hex_row.bins_overlapping[nearest_bin_idx]
-                    bin_key = (tuple(nearest_bin_info['eta_vertices']), tuple(nearest_bin_info['phi_vertices']))
-
-                    if bin_key not in bin_pt:
-                        bin_pt[bin_key] = 0
-
-                    bin_pt[bin_key] += bin_pts[nearest_bin_idx]
-
-                bin_pt_by_layer[layer_idx] = bin_pt
-
-            # Convert the bin_pt_by_layer dictionary into a list of dictionaries
-            event_rows = []
-
-            for layer_idx, pt_dict in bin_pt_by_layer.items():
-                for bin_key, pt in pt_dict.items():
-                    row = {
-                        'event': event,
-                        'layer': layer_idx,
-                        'eta_vertices': bin_key[0],
-                        'phi_vertices': bin_key[1],
-                        'pt': pt
-                    }
-                    event_rows.append(row)
-
-            all_event_rows.extend(event_rows)
-
-        end_time = time.time()
-        print("Execution time loop - baseline", end_time - start_time)
-
-        # Convert the list of dictionaries to a DataFrame
-        df_baseline = pd.DataFrame(all_event_rows, columns=['event', 'layer', 'eta_vertices', 'phi_vertices', 'pt'])
-
-        # Group by eta_vertices and phi_vertices and sum the pt
-        df_baseline = df_baseline.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'pt': 'sum'}).reset_index()
-
-        #print("df_baseline", df_baseline)
-        return df_baseline
-
-
-    def area_overlap_by_event(self, df_hexagon_info, subdet):
-        print("Area overlap algorithm ...")
-        # Initialize a list to store the results for all events
-        all_event_rows = []
-        # Get unique event indices
-        unique_events = df_hexagon_info.index.get_level_values('event').unique()
-
-        start_time = time.time()
-
-        for event in unique_events:
-            print(f"Processing event {event}...")
-            df_event = df_hexagon_info.loc[event]
-            bin_pt_by_layer = {}
-            unique_layers = df_event.index.get_level_values('layer').unique()
-
-            if subdet == 'CEE':
-                print("CEE subdet ...")
-                unique_layers = unique_layers[unique_layers < 29]
-            elif subdet == 'CEH':
-                print("CEH subdet ...")
-                unique_layers = unique_layers[unique_layers >= 29]
-            else:
-                print("CEE + CEH subdet ...")
-                unique_layers = unique_layers
-
-            for layer_idx in unique_layers:
-                layer_df = df_event.loc[df_event.index.get_level_values('layer') == layer_idx]
-
-                bin_pt = {}  # Initialize pt for bins in the current layer
-
-                for hex_row in layer_df.itertuples():
-                    if not hex_row.bins_overlapping: # Skip hexagons with no overlapping bins
-                        continue
-
-                    for bin_info in hex_row.bins_overlapping:
-                        bin_info['pt'] = hex_row.ts_pt * bin_info['percentage_overlap']
-                        bin_key = (tuple(bin_info['eta_vertices']), tuple(bin_info['phi_vertices']))
-
-                        if bin_key not in bin_pt:
-                            bin_pt[bin_key] = 0
-
-                        bin_pt[bin_key] += bin_info['pt']
-
-                    bin_pt_by_layer[layer_idx] = bin_pt
-
-            # Convert the bin_pt_by_layer dictionary into a list of dictionaries
-            event_rows = []
-
-            for layer_idx, pt_dict in bin_pt_by_layer.items():
-                for bin_key, pt in pt_dict.items():
-                    row = {
-                        'event': event,
-                        'layer': layer_idx,
-                        'eta_vertices': bin_key[0],
-                        'phi_vertices': bin_key[1],
-                        'pt': pt
-                    }
-                    event_rows.append(row)
-
-            all_event_rows.extend(event_rows)
-
-        end_time = time.time()
-        print("Execution time loop - area overlap by event", end_time - start_time)
-
-        # Convert the list of dictionaries to a DataFrame
-        df_2 = pd.DataFrame(all_event_rows, columns=['event', 'layer', 'eta_vertices', 'phi_vertices', 'pt'])
-
-        # Group by eta_vertices and phi_vertices and sum the pt
-        df_2 = df_2.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'pt': 'sum'}).reset_index()
-        return df_2
-
-    def area_overlap_8Towers_by_event(self, df_hexagon_info, subdet):
-        print("Algorithm 1/8s towers ...")
-        start_time = time.time()
-
-        # Initialize a list to store the results for all events
-        all_event_results = []
-
-        # Get unique event indices
-        unique_events = df_hexagon_info.index.get_level_values('event').unique()
-
-        # Iterate over each event
-        for event in unique_events:
-            print(f"Processing event {event}...")
-
-            # Extract the DataFrame for the current event
-            df_event = df_hexagon_info.loc[event]
-
-            # Get unique layer indices for the current event
-            unique_layers = df_event.index.get_level_values('layer').unique()
-
-            if subdet == 'CEE':
-                print("CEE subdet ...")
-                unique_layers = unique_layers[unique_layers < 29]
-            elif subdet == 'CEH':
-                print("CEH subdet ...")
-                unique_layers = unique_layers[unique_layers >= 29]
-            else:
-                print("CEE + CEH subdet ...")
-
-            # Iterate over unique layer indices
-            for layer_idx in unique_layers:
-                # Filter DataFrame for the current layer
-                layer_df = df_event[df_event.index.get_level_values('layer') == layer_idx]
-
-                # Iterate over each row of the filtered DataFrame for the current layer
-                for _, row in layer_df.iterrows():
-                    # Initialize pt values for all bins to 0
-                    for bin_info in row['bins_overlapping']:
-                        bin_info['pt'] = 0.0
-                        bin_info['event'] = event  # Ensure event information is added
-                        bin_info['layer'] = layer_idx  # Ensure layer information is added
-
-                    total_pt = row['ts_pt']
-                    #print("Total pt hexagon:", total_pt)
-
-                    # Filter out bins with area overlap greater than 0
-                    filtered_bins = [bin_info for bin_info in row['bins_overlapping'] if bin_info['percentage_overlap'] > 0]
-                    num_bins = len(filtered_bins)
-
-                    # Sort bins based on percentage overlap in descending order
-                    sorted_bins = sorted(filtered_bins, key=lambda x: x['percentage_overlap'], reverse=True)
-
-                    # Calculate pt distribution
-                    remaining_pt = total_pt
-                    top_bins = sorted_bins[:8] if num_bins > 8 else sorted_bins
-                    for bin_info in top_bins:
-                        percent = round(bin_info['percentage_overlap'] * 8)
-                        percent = max(1, percent)  # Ensure at least 1
-                        pt_fraction = percent / 8
-                        pt_assigned = min(remaining_pt, pt_fraction * total_pt)
-                        bin_info['pt'] = pt_assigned
-                        remaining_pt -= pt_assigned
-                        if remaining_pt <= 0:
-                            #print("pt finished")
-                            break  # Stop assigning pt if all available pt is exhausted
-
-                    # Append results for the current layer to the event_results list
-                    all_event_results.extend(row['bins_overlapping'])
-
-        #print("All events results:", all_event_results)
-        # Calculate the execution time
-        end_time = time.time()
-        print("Execution time loop - area overlap by event:", end_time - start_time)
-
-        # Extract pt information for each bin and construct DataFrame
-        flattened_bins = []
-        for bin_info in all_event_results:
-            eta_vertices = bin_info['eta_vertices']
-            phi_vertices = bin_info['phi_vertices']
-            pt = bin_info['pt']
-            event = bin_info['event']
-            layer = bin_info['layer']
-            flattened_bins.append({'event': event, 'layer': layer, 'eta_vertices': tuple(eta_vertices), 'phi_vertices': tuple(phi_vertices), 'pt': pt})
-
-        # Convert the list of dictionaries to a DataFrame
-        flattened_bins_df = pd.DataFrame(flattened_bins)
-
-        # Group by event, eta_vertices, and phi_vertices and sum the pt
-        df_over_final = flattened_bins_df.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'pt': 'sum'}).reset_index()
-
-        total_pt = df_over_final['pt'].sum()
-        #print("Total pt sum:", total_pt)
-
-        # Print intermediate results
-        #print("Flattened bins:", flattened_bins_df)
-        #print("Final bins:", df_over_final)
-
-        print("Execution time loop - area 8towers:", end_time - start_time)
-
-        return df_over_final
 
     def sph2cart(self, eta, phi, z=322.):
         ''' Useful conversion: Spherical coordinates to cartesian coordinates (x, y)  '''
@@ -1050,204 +539,6 @@ class Processing():
 
         return df_bins
     
-
-    #SAVING
-
-    def save_bin_geo(self, df_bins, output_file, output_file_vertex):
-        print("saving geometry bins to geojson")
-        # Lists to store GeoJSON features
-        features_bin_poly_with_arcs = []
-        features_vertices = []
-
-        # Iterate over each bin in df_bins
-        for _, row in df_bins.iterrows():
-            layer = row['Layer']
-            z = row['Z_value']
-            center = np.array([0., 0.])
-            
-            # Iterate over bins in the current layer
-            for bin_info in row['Bins']:
-                # Extract bin vertices
-                x_vertices = bin_info['X_Vertices']
-                y_vertices = bin_info['Y_Vertices']
-                eta_vertices = bin_info['Eta_Vertices']
-                phi_vertices = bin_info['Phi_Vertices']
-
-                eta_vertices_list = eta_vertices.tolist() if isinstance(eta_vertices, np.ndarray) else eta_vertices
-                phi_vertices_list = phi_vertices.tolist() if isinstance(phi_vertices, np.ndarray) else phi_vertices
-
-                # Create a tower bin with arcs using Shapely
-                bin_polygon = self.create_bin_polygon(x_vertices, y_vertices, eta_vertices, phi_vertices, center)
-
-                # Convert Shapely polygon to GeoJSON feature
-                feature_bin_poly_with_arcs = {
-                    'type': 'Bin',
-                    'geometry': mapping(bin_polygon),  # Convert polygon to GeoJSON geometry
-                    'properties': {
-                        'Layer': layer,
-                        'Z_value':z,
-                        'Eta_vertices': eta_vertices_list,
-                        'Phi_vertices': phi_vertices_list,
-                    }
-                }
-                features_bin_poly_with_arcs.append(feature_bin_poly_with_arcs)  # Add feature to the list
-
-
-                # Create a tower bin with with only the four vertices using Shapely
-                vertices_polygon = Polygon(zip(x_vertices, y_vertices))
-
-
-                # Convert Shapely polygon to GeoJSON feature with vertices as geometry
-                feature_vertices = {
-                    'type': 'Feature',
-                    'geometry': mapping(vertices_polygon),  # Convert polygon to GeoJSON geometry
-                    'properties': {
-                        'Layer': layer,
-                        'Z_value': z,
-                        'Eta_vertices': eta_vertices_list,
-                        'Phi_vertices': phi_vertices_list,
-                    }
-                }
-                features_vertices.append(feature_vertices)  # Add feature to the list
-
-        # Create GeoJSON FeatureCollection
-        feature_collection = {
-            'type': 'FeatureCollection',
-            'features': features_bin_poly_with_arcs
-        }
-        # Write GeoJSON data to file
-        with open(output_file, 'w') as f:
-            json.dump(feature_collection, f, indent=4)
-
-        print("GeoJSON with bin poly with arcs saved to:", output_file)
-
-        # Create GeoJSON FeatureCollection for polygon features
-        feature_collection_vertices = {
-            'type': 'FeatureCollection',
-            'features': features_vertices
-        }
-
-        # Write GeoJSON data with bin_polygon geometry to file
-        with open(output_file_vertex, 'w') as f_polygon:
-            json.dump(feature_collection_vertices, f_polygon, indent=4)
-
-        print("GeoJSON with bin poly, only vertices, saved to:", output_file_vertex)
-
-
-    def save_bin_hex(self, output_file):
-        features = []  # List to store GeoJSON features
-        existing_properties = set()
-
-        # Three different x/y shifts for CE-E (subdet 1), CE-H (subdet 2) for even and odd layers
-        diff_x_subdet1 = -1.387
-        diff_y_subdet1 = -0.601
-
-        diff_x_subdet2_even = -1.387
-        diff_y_subdet2_even = -0.745
-
-        diff_x_subdet2_odd = -1.387
-        diff_y_subdet2_odd = -0.457
-
-        # Iterate over each bin in self.ds_geom['si']
-        for _, row in self.ds_geom['si'].iterrows():
-            layer = row['ts_layer']
-            z = row['z']
-            wu = row['ts_wu']
-            wv = row['ts_wv']
-
-            hex_x, hex_y = row['hex_x'], row['hex_y']
-
-            if layer <= 28:
-                hex_x_shifted = [x + diff_x_subdet1 for x in hex_x]
-                hex_y_shifted = [y + diff_y_subdet1 for y in hex_y]
-            elif layer % 2 == 0:
-                hex_x_shifted = [x + diff_x_subdet2_even for x in hex_x]
-                hex_y_shifted = [y + diff_y_subdet2_even for y in hex_y]
-            else:
-                hex_x_shifted = [x + diff_x_subdet2_odd for x in hex_x]
-                hex_y_shifted = [y + diff_y_subdet2_odd for y in hex_y]
-
-            hex_polygon = Polygon([(x, y) for x, y in zip(hex_x_shifted, hex_y_shifted)])
-            
-            feature = {
-                'type': 'Feature',
-                'geometry': mapping(hex_polygon),  # Convert polygon to GeoJSON geometry
-                'properties': {
-                    'Layer': layer,
-                    'z': z,
-                    'wu': wu,
-                    'wv': wv
-                }
-            }
-
-            feature_properties = (layer, z, wu, wv)  # Tuple representing the properties of the feature
-            if feature_properties not in existing_properties:  # Check if properties already exist
-                existing_properties.add(feature_properties)  # Add properties to the set
-                features.append(feature)  # Add feature to the list
-
-        # Create GeoJSON FeatureCollection
-        feature_collection = {
-            'type': 'FeatureCollection',
-            'features': features
-        }
-        
-        print("saving hexagons geometry in geojson file")
-        # Write GeoJSON data to file
-        with open(output_file, 'w') as f:
-            json.dump(feature_collection, f, indent=4)
-
-
-    def save_scint_mod_geo(self, merged_df, output_file):
-        print("Saving scintillator module geometries to GeoJSON")
-        features_scint_mod_poly = []
-
-        # Iterate over each row in the merged DataFrame
-        for _, row in merged_df.iterrows():
-            ts_ieta = row['ts_ieta']
-            ts_iphi = row['ts_iphi']
-            tc_layer = row['tc_layer']
-            ordered_vertices_list = row['vertices_clockwise']
-            #print(ordered_vertices_list)
-
-            # Convert string representation of vertices to list of floats
-            ordered_vertices = [list(map(float, vertex)) for vertex in ordered_vertices_list]
-
-            # Create a Shapely Polygon from the ordered vertices
-            polygon = Polygon(ordered_vertices)
-
-            # Convert Shapely polygon to GeoJSON feature
-            feature_scint_mod_poly = {
-                    'type': 'Feature',
-                    'geometry': mapping(polygon),  # Convert polygon to GeoJSON geometry
-                    'properties': {
-                        'Layer': tc_layer,
-                        'ieta': ts_ieta,
-                        'iphi': ts_iphi,
-                    }
-                }
-            features_scint_mod_poly.append(feature_scint_mod_poly)  # Add feature to the list
-
-        # Create GeoJSON FeatureCollection
-        feature_collection = {
-            'type': 'FeatureCollection',
-            'features': features_scint_mod_poly
-        }
-
-        # Write GeoJSON data to file
-        with open(output_file, 'w') as f:
-            json.dump(feature_collection, f, indent=4)
-
-        print("GeoJSON with scintillator module geometries saved to:", output_file)
-
-    def read_geojson_files(self, bins_geojson_file, hexagons_geojson_file, scint_geojson_file):
-        with open(bins_geojson_file, 'r') as f:
-            bins_data = json.load(f)
-        with open(hexagons_geojson_file, 'r') as f:
-            hexagons_data = json.load(f)
-        with open(scint_geojson_file, 'r') as f:
-            scint_data = json.load(f)
-        return bins_data, hexagons_data, scint_data
-
     def update_bins(self, baseline_df, bins_df):
         # Filter the bins from the first layer
         first_layer_bins = bins_df[bins_df['Layer'] == 1]
@@ -1301,17 +592,6 @@ class Processing():
         #print("SUMMED FINAL", summed_df)
 
         return final_df, summed_df
-
-    def save_eta_phi_differences(self, results_df, filename):
-        eta_diffs = results_df['eta_diff']
-        phi_diffs = results_df['phi_diff']
-        
-        with open(filename, 'w') as file:
-            file.write("eta_diff,phi_diff\n")
-            for eta_diff, phi_diff in zip(eta_diffs, phi_diffs):
-                file.write(f"{eta_diff},{phi_diff}\n")
-
-    #SPLITTING
             
     def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename, data_gen, bins_df):
         print('Mod sum to towers')
@@ -1336,14 +616,14 @@ class Processing():
         #print("QUIIIIII, hexagon_info_df COLUMNS", hexagon_info_df.columns)
 
         if algo == 'baseline':
-            df_algo = self.baseline_by_event(hexagon_info_df, subdet)
+            df_algo = self.algorithms.baseline_by_event(hexagon_info_df, subdet)
             
         elif algo == 'area_overlap':
-            df_algo = self.area_overlap_by_event(hexagon_info_df, subdet)
+            df_algo = self.algorithms.area_overlap_by_event(hexagon_info_df, subdet)
             print("df_algo", df_algo.columns)
 
         elif algo == '8towers':
-            df_algo = self.area_overlap_8Towers_by_event(hexagon_info_df, subdet)
+            df_algo = self.algorithms.area_overlap_8Towers_by_event(hexagon_info_df, subdet)
         
         else:
             raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap' or '8towers'.")
@@ -1351,8 +631,8 @@ class Processing():
         df , df_sum = self.apply_update_to_each_event(df_algo, bins_df)
 
         print("Eta/Phi resolution evaluation")
-        #df_resolution = self.eval_eta_phi_photon_resolution(df, data_gen, window_size=8, subwindow_size=5)
-        #self.save_eta_phi_differences(df_resolution, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_hadd_123_subw_5x5_OK.txt')
+        df_resolution = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, window_size=8, subwindow_size=5)
+        self.resolution.save_eta_phi_differences(df_resolution, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_hadd_123_subw_5x5_OK.txt')
         #plotMS.plot_energy_ratio_histogram()
         #plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
         print("data_gen", data_gen.columns)
@@ -1516,240 +796,3 @@ class Processing():
         df_hexagon_info.set_index(['event', 'layer'], inplace=True)  # Now, 'event' and 'layer' are part of the index, not regular columns. This enables hierarchical organization
 
         return df_hexagon_info
-
-    def find_particle_bin_and_evaluate_windows_2(self, baseline_df, genpart_df, window_size=8, subwindow_size=5):
-        particle_eta = genpart_df['gen_eta'].iloc[0]
-        particle_phi = genpart_df['gen_phi'].iloc[0]
-        event_number = genpart_df['event'].iloc[0]
-        print("gen part dataframe",  genpart_df)
-        #print("gen part dataframe",  genpart_df.columns)
-
-        # Find the bin where the generated particle is located
-        baseline_df = baseline_df.copy()
-        baseline_df['eta_center'] = baseline_df['eta_vertices'].apply(lambda x: np.mean(x))
-        baseline_df['phi_center'] = baseline_df['phi_vertices'].apply(lambda x: np.mean(x))
-
-        # Find the bin with the minimum distance to the particle's eta and phi
-        particle_bin_idx = ((baseline_df['eta_center'] - particle_eta).abs() + (baseline_df['phi_center'] - particle_phi).abs()).idxmin()
-        particle_bin = baseline_df.loc[particle_bin_idx]
-
-        #print("particle bin", particle_bin)
-
-        # Get the minimum vertex of the particle's bin
-        min_eta_vertex = np.min(particle_bin['eta_vertices'])
-        min_phi_vertex = np.min(particle_bin['phi_vertices'])
-
-        # Define the window size in eta and phi
-        bin_eta_size = np.max(particle_bin['eta_vertices']) - min_eta_vertex
-        bin_phi_size = np.max(particle_bin['phi_vertices']) - min_phi_vertex
-
-        # Calculate eta_min and phi_min based on the minimum vertex of the particle's bin
-        eta_min = min_eta_vertex - (window_size // 2) * bin_eta_size
-        eta_max = min_eta_vertex + (1+ (window_size // 2)) * bin_eta_size
-        phi_min = min_phi_vertex - (window_size // 2) * bin_phi_size
-        phi_max = min_phi_vertex + (1+(window_size // 2)) * bin_phi_size
-
-        # Ensure eta and phi bounds are within the specified range
-        eta_min = max(eta_min, 1.305)
-        eta_max = min(eta_max, 3.045)
-        phi_min = max(phi_min, -3.141593)
-        phi_max = min(phi_max, 3.141593)
-
-        window_bins = baseline_df[
-            (baseline_df['eta_center'] >= eta_min) & (baseline_df['eta_center'] <= eta_max) &
-            (baseline_df['phi_center'] >= phi_min) & (baseline_df['phi_center'] <= phi_max)
-        ]
-
-        # Create an empty list to store the energies for each 3x3 subwindow
-        subwindow_energies = []
-
-        # Step size for subwindow iteration
-        step_eta = bin_eta_size
-        step_phi = bin_phi_size
-
-        max_pt = -1
-        best_subwindow = None
-        best_subwindow_data = {}
-
-        # Iterate over each possible 3x3 subwindow within the 12x12 window
-        for i in range(window_size - subwindow_size + 2):
-            for j in range(window_size - subwindow_size + 2):
-                eta_start = eta_min + i * step_eta
-                eta_end = eta_start + subwindow_size * step_eta
-                phi_start = phi_min + j * step_phi
-                phi_end = phi_start + subwindow_size * step_phi
-
-                eta_start = max(eta_start, 1.305)
-                eta_end = min(eta_end, 3.045)
-                phi_start = max(phi_start, -3.141593)
-                phi_end = min(phi_end, 3.141593)
-
-                subwindow = window_bins[
-                    (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] <= eta_end) &
-                    (window_bins['phi_center'] >= phi_start) & (window_bins['phi_center'] <= phi_end)
-                ]
-                #print("subwindow", subwindow.columns)
-                #print("subwindow", subwindow.columns)
-                if len(subwindow) == subwindow_size * subwindow_size:
-                    total_pt = subwindow['pt'].sum()
-                    subwindow_energies.append(total_pt)
-
-                    particle_eta_1 = genpart_df['gen_eta'].iloc[0]
-                    particle_phi_1 = genpart_df['gen_phi'].iloc[0]
-
-                    #plotMS.plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max, eta_start, eta_end, phi_start, phi_end, particle_eta_1, particle_phi_1)
-
-                    if total_pt > max_pt:
-                        max_pt = total_pt
-                        best_subwindow = subwindow
-                        best_subwindow_data = {
-                        'subwindow': best_subwindow,
-                        'total_pt': max_pt
-                    }
-
-        #print("subwindow data", best_subwindow_data)
-        if best_subwindow_data:
-            best_subwindow = best_subwindow_data['subwindow']
-            best_subwindow_pt = best_subwindow_data['total_pt']
-
-            # Calculate the weighted eta position
-            if best_subwindow_data['total_pt'] < 0.001:
-                # If total pt is very small, use the center of the central bin
-                central_bin_index = 4  # Fifth row (assuming zero-indexed)
-                weighted_eta = best_subwindow.iloc[central_bin_index]['eta_center']
-                weighted_phi = best_subwindow.iloc[central_bin_index]['phi_center']
-            else:
-                # Otherwise, calculate weighted eta and phi positions
-                total_pt = best_subwindow['pt'].sum()
-                weighted_eta = (best_subwindow['pt'] * best_subwindow['eta_center']).sum() / total_pt
-                weighted_phi = (best_subwindow['pt'] * best_subwindow['phi_center']).sum() / total_pt
-
-            prova_phi = best_subwindow.iloc[4]['phi_center']
-            prova_eta = best_subwindow.iloc[4]['eta_center']
-
-            #print("prova eta e phi", prova_phi, prova_eta)
-
-        # Calculate the difference with the actual eta of the generated particle
-        eta_diff = weighted_eta - particle_eta
-        phi_diff = weighted_phi - particle_phi
-
-        # Check for infinite or NaN values
-        if not np.isfinite(eta_diff) or not np.isfinite(phi_diff):
-            print("Warning: Infinite or NaN values detected in eta_diff or phi_diff. Handling edge case.")
-            # Handle edge case (for example, set to zero or NaN)
-            eta_diff = 0.0
-            phi_diff = 0.0  # or phi_diff = np.nan
-
-        # Save required data to files --> devo lavorare tutto in pt e non in pt altriemnti non riesco a confrontare con la gen part
-        genpart_pt = genpart_df['gen_pt'].iloc[0]
-        #best_subwindow_pt = max_pt
-        pt_ratio = best_subwindow_pt / genpart_pt if genpart_pt != 0 else np.nan
-        with open('genpart_pt.txt', 'a') as f1, open('best_subwindow_pt_overlap.txt', 'a') as f2, open('pt_ratio_overlap.txt', 'a') as f3:
-            f1.write(f"{genpart_pt}\n")
-            f2.write(f"{best_subwindow_pt}\n")
-            f3.write(f"{pt_ratio}\n")
-
-        if pt_ratio > 1.3:
-            print("event", event_number)
-            print("genpart_pt", genpart_pt)
-            print("best_subwindow_pt", best_subwindow_pt)
-            print("pt_ratio", pt_ratio)
-
-        events_gt_2_5 = []
-        events_gt_2_5_and_eta_diff_lt_minus_0_2 = []
-        # Save eta_diff and phi_diff to different files based on gen_eta condition
-        if particle_eta < 2:
-            with open('diffs_lt_2.txt', 'a') as f:
-                f.write(f"{eta_diff},{phi_diff}\n")
-        elif particle_eta > 2.5:
-            with open('diffs_gt_2_5.txt', 'a') as f:
-                f.write(f"{eta_diff},{phi_diff}\n")
-                events_gt_2_5.append(event_number)
-            if eta_diff < -0.2:
-                events_gt_2_5_and_eta_diff_lt_minus_0_2.append(event_number)
-                print(f"Event info: {event_number}, eta_diff: {eta_diff}, phi_diff: {phi_diff}")
-
-        #Save event numbers to files
-        with open('events_gt_2_5.txt', 'a') as f:
-            for event in events_gt_2_5:
-                f.write(f"{event}\n")
-
-        with open('events_gt_2_5_and_eta_diff_lt_minus_0_2.txt', 'a') as f:
-            for event in events_gt_2_5_and_eta_diff_lt_minus_0_2:
-                f.write(f"{event}\n")
-
-        return subwindow_energies, eta_diff, phi_diff
-
-    def eval_eta_phi_photon_resolution(self, df, genpart_df, window_size=8, subwindow_size=5):
-        all_results = []
-        #print("df IN RESOLUTION", df.columns) #contains pt columns
-
-        #print("GEN PART COLUMNS", genpart_df.columns)
-        #print(genpart_df['event'])
-
-        unique_events = df['event'].unique()
-        #print("len(unique_events)", len(unique_events))
-
-        for event in unique_events:
-            #print(f"Processing event {event}...")
-            
-            # Extract the DataFrame for the current event
-            event_df = df[df['event'] == event]
-
-            #print("event_df", event_df, "genpart_df['event']", genpart_df['gen_eta'])
-
-            if len(unique_events) ==1: 
-                event_genpart_df = genpart_df
-            else: 
-                event_genpart_df = genpart_df[genpart_df['event'] == event]
-
-            #print("event_genpart_df", event_genpart_df)
-
-            # Apply the find_particle_bin_and_evaluate_windows function
-            subwindow_energies, eta_diff, phi_diff = self.find_particle_bin_and_evaluate_windows_2(event_df, event_genpart_df, window_size, subwindow_size)
-
-            # Store the results
-            result = {
-                'event': event,
-                'subwindow_energies': subwindow_energies,
-                'eta_diff': eta_diff,
-                'phi_diff': phi_diff
-            }
-            all_results.append(result)
-
-        return pd.DataFrame(all_results)
-
-    def check_pt(self, data, data_gen):
-        print("check pt")
-        # Initialize a list to store ratios
-        ratios = []
-
-        # Group data by events
-        data_grouped = data.groupby('event')
-        data_gen_grouped = data_gen.groupby('event')
-
-        for event_id in data_grouped.groups.keys():
-            event_data = data_grouped.get_group(event_id)
-            event_gen_data = data_gen_grouped.get_group(event_id)
-
-            # Ensure there is only one gen entry per event for simplicity
-            if len(event_gen_data) == 1:
-                gen_pt = event_gen_data['gen_pt'].values[0]
-                event_data_ts_pt_sum = event_data['ts_pt'].sum()
-
-                ratio = event_data_ts_pt_sum / gen_pt
-                ratios.append(ratio)
-
-                if ratio > 3:
-                    print(f"Event {event_id} has ratio > 3")
-                    print(f"ts_pt: {event_data_ts_pt_sum}, gen_pt: {gen_pt}")
-                    print(f"gen_phi: {event_gen_data['gen_phi'].values[0]}, gen_eta: {event_gen_data['gen_eta'].values[0]}")
-
-        # Plot histogram of ratios
-        bins = np.linspace(0, 10, 11)  # 10 bins between 0 and 10
-        plt.hist(ratios, bins=bins, edgecolor='black')
-        plt.xlabel('ts_pt / gen_pt')
-        plt.ylabel('Frequency')
-        plt.title('Histogram of ts_pt/gen_pt Ratios per Event')
-        plt.xlim(0, 10)  # Set x-axis limit between 0 and 10
-        plt.show()
