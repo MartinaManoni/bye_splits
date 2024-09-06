@@ -98,6 +98,7 @@ class Processing():
             if str(event) not in self.list_events:
                 raise ValueError(f"Event {event} not found in the HDF5 file.")
             processed_event_df = self.get_event(event,geom)
+            events_to_process = event
         return processed_event_df, events_to_process
 
     def get_event(self, event, geom):
@@ -207,11 +208,10 @@ class Processing():
                 print("Error: Group '{}' not found in HDF5 file.".format(group_name))
 
     def process_event(self, df_ts):
-        #(self, df_ts, df_tc)
-        print("Process events ...")
-        print("Filled data ts columns", df_ts.columns)
-        #print("DATA tf ts pt", df_ts['ts_pt'].sum())
-        print("DATA tf ts pt", df_ts['ts_pt'].sum())
+        """
+        Merging V11 data with geometry, separately for silicon and scintillator
+        """
+        print("Processing events V11...")
 
         ts_keep = {'waferu'       : 'ts_wu',
                    'waferv'       : 'ts_wv',
@@ -226,91 +226,90 @@ class Processing():
         self.ds_geom['si']  = self.ds_geom['si'].rename(columns=ts_keep)
         self.ds_geom['sci'] = self.ds_geom['sci'].rename(columns=sci_update)
 
-        #SILICON
-        print("GEOMETRY silicon columns", self.ds_geom['si'].columns)
+        #SILICON V11
+
         ds_si_geo = self.ds_geom['si'].drop_duplicates(subset=['ts_layer', 'ts_wu', 'ts_wv'], keep='first')
 
         #plotMS.plot_layers(df_ts, ds_new)
         #plotMS.plot_layers_sci(df_tc, self.ds_geom['sci'])
 
-        # Merge between data and geometry SILICON
+        # Merge dataframes
         silicon_df = pd.merge(left=df_ts, right=ds_si_geo, how='inner',
                                       on=['ts_layer', 'ts_wu', 'ts_wv'])
-        silicon_df = silicon_df.drop(['triggercellu','triggercellv','waferorient', 'waferpart','diamond_x', 'diamond_y'], axis=1)
+        silicon_df = silicon_df.drop(['triggercellu','triggercellv','waferorient', 'waferpart','diamond_x', 'diamond_y'], axis=1) #anche qui tagliare sul subdet!!
 
         # Shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW)
         shifted_hex_df = self.shift_hex_values(silicon_df, self.ds_geom['si'], df_ts)
 
-        #SCINTILLATOR
-        #Adding scintillator modules to scintillator geometry - reproducing what is done at the moment in CMSSW:
-        #https://github.com/hgc-tpg/cmssw/blob/hgc-tpg-devel-CMSSW_14_0_0_pre1/L1Trigger/L1THGCal/plugins/geometries/HGCalTriggerGeometryV9Imp3.cc#L989
+        #SCINTILLATOR V11
 
-        self.geometry.add_scint_modules_var(self.ds_geom['sci'])
-        #scint_mod_geom = self.geometry.create_scint_mod_geometry(self.ds_geom['sci'])
+        self.geometry.implement_scint_modules_id(self.ds_geom['sci'])
+        scint_mod_geom = self.geometry.create_scint_mod_geometry(self.ds_geom['sci'], save_geojson = False)
         #plotMS.plot_scint_tiles(self.ds_geom['sci'])
-        #print("Scintillator geometry", scint_mod_geom.columns)
 
-        '''scintillator_df = pd.merge(left=df_tc, right=self.ds_geom['sci'], how='inner', #FIXME
-                                           on=['tc_layer', 'tc_wu', 'tc_cu', 'tc_cv'])'''
-        #print("shifted_hex_df")
-        #print(shifted_hex_df[['hex_x', 'hex_y']])
-        #print("\nsilicon_df")
-        #print(silicon_df[['hex_x', 'hex_y']])
+        sci_merge = {'ts_ieta' : 'ts_eta',
+                      'ts_iphi' : 'ts_phi',
+                      'tc_layer' : 'ts_layer'}
+
+        scint_mod_geom = scint_mod_geom.rename(columns=sci_merge)
+
+         # Merge dataframes
+        '''scintillator_df = pd.merge(left=df_ts, right=scint_mod_geom, how='inner', #FIXME ma qui devo scelgiere solo IL 3° SUBDET dei dati che non HO!! devo aggiungerlo!!
+                                           on=['ts_layer', 'ts_eta', 'ts_phi'])'''
 
         return shifted_hex_df
 
     def process_event_V16(self, df_ts):
-        print("Process events V16 ...")
-        #print("data gen", data_gen)
-
+        """
+        Merging V16 data with geometry, separately for silicon and scintillator
+        """
+        print("Processing events V16 ...")
         #x,y = self.sph2cart(data_gen['gen_eta'], data_gen['gen_phi'], z=322.)
-        print("Filled data ts columns V16", df_ts.columns)
 
-        # Load the GeoJSON data
-        # Read GeoJSON data from a file
-        with open('/eos/home-m/mmanoni/HGCAL_V16/V16_geojson_geometry/silicon_geometry_V16_eta_GT0.json', 'r') as file:
-            geojson_data = file.read()
-
-        geojson = json.loads(geojson_data)
-
-        # Initialize lists to hold the extracted data
-        layers, waferus, wafervs, hex_xs, hex_ys = [], [], [], [], []
-
-        # Extract data from GeoJSON features
-        for feature in geojson['features']:
-            properties = feature['properties']
-            geometry = feature['geometry']['coordinates'][0]
-
-            layers.append(properties['Layer'])
-            waferus.append(properties['wu'])
-            wafervs.append(properties['wv'])
-
-            hex_x = [coord[0] for coord in geometry]
-            hex_y = [coord[1] for coord in geometry]
-
-            hex_xs.append(hex_x)
-            hex_ys.append(hex_y)
-
-        # Create a DataFrame from the extracted data
-        df_geo = pd.DataFrame({
-            'ts_layer': layers,
-            'ts_wu': waferus,
-            'ts_wv': wafervs,
-            'hex_x': hex_xs,
-            'hex_y': hex_ys
-        })
+        #SILICON V16
+        df_geo_si_V16 = self.geometry.create_si_mod_geometry_V16()
 
         # Merge the DataFrames
-        merged_df = pd.merge(left=df_ts, right=df_geo, how='inner', on=['ts_layer', 'ts_wu', 'ts_wv'])
-        merged_df=merged_df[merged_df['ts_mipPt'] > 0.5]
-        #plotMS.plot_layer_hexagons(merged_df, 11, x,y)
+        df_si_merged = pd.merge(left=df_ts, right=df_geo_si_V16, how='inner', on=['ts_layer', 'ts_wu', 'ts_wv'])
+        df_si_merged=df_si_merged[df_si_merged['ts_mipPt'] > 0.5]
 
-        return merged_df
+        #plotMS.plot_layer_hexagons(df_si_merged, 11, x,y)
+
+        #SCINTILLATOR V16
+        sci_update = {'triggercellieta' : 'tc_cu',
+                      'triggercelliphi' : 'tc_cv',
+                      'layer'           : 'tc_layer',
+                      'waferu'          : 'tc_wu',
+                      'waferv'          : 'tc_wv'}
+
+        self.ds_geom['sci'] = self.ds_geom['sci'].rename(columns=sci_update)
+        df = self.geometry.implement_scint_modules_id(self.ds_geom['sci'])
+        scint_mod_geom = self.geometry.create_scint_mod_geometry(df, save_geojson = True)
+        #plotMS.plot_scint_tiles(self.ds_geom['sci'])
+
+        sci_merge = {'ts_ieta' : 'ts_wu',
+                      'ts_iphi' : 'ts_wv',
+                      'tc_layer' : 'ts_layer'}
+
+        scint_mod_geom = scint_mod_geom.rename(columns=sci_merge)
+        df_ts_filtered = df_ts[df_ts['ts_subdet'] == 3] #filtering to select only SUBDET 3 corresponding to the scintillator part
+
+        # Merge dataframes
+        scintillator_df = pd.merge(left=df_ts_filtered, right=scint_mod_geom, how='inner',
+                                           on=['ts_layer', 'ts_wu', 'ts_wv'])
+        print("df_ts_filtered COL", df_ts_filtered.columns)
+        print("df_ts_filtered", df_ts_filtered)
+        print("scintillator_df COL", scintillator_df.columns)
+        print("scintillator_df ALL", scintillator_df)
+        #print("scintillator_df", scintillator_df['geometry'])
+        print("scintillator_df VERTEX", scintillator_df['vertices_clockwise'])
+
+        return df_si_merged
 
     def shift_hex_values(self, silicon_df_proc, df_geom, df_ts):
-        '''shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW),
+        """Shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW),
            in order to maintain as center of the hexagon the orginal ts_x/ts_y. 
-           It returns the dataframe with the applied shifts'''
+           It returns the dataframe with the applied shifts"""
         
         # Three different x/y shifts for CE-E (subdet 1), CE-H (subdet 2) for even and odd layers
         diff_x_subdet1 = -1.387
@@ -746,6 +745,14 @@ class Processing():
                 } for hex_row in event_data[event_data['ts_layer'] == layer_name].itertuples()
             ] for event, event_data in event_groups for layer_name in layer_names
         }
+
+        # Check for hexagons with fewer than 6 vertices
+        for (event, layer_name), hex_list in hex_geometries.items():
+            for hex_item in hex_list:
+                hex_polygon = hex_item['hex_polygon']
+                # Check if the number of vertices is less than 6
+                if len(hex_polygon.exterior.coords) < 6:
+                    print(f"Warning: Event '{event}', Layer '{layer_name}' has a hexagon with fewer than 6 vertices: {list(hex_polygon.exterior.coords)}")
 
         hierarchical_data = []
 

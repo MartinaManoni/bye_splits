@@ -262,16 +262,61 @@ class Geometry():
         with open(output_file, 'w') as f:
             json.dump(feature_collection, f, indent=4)
 
-    #SCINTILLATOR GEOMETRY
-            
-    def add_scint_modules_var(self, df):
-        #Adding to the dataframe ieta (ts_ieta) and iphi (ts_iphi) identifier for scintillator modules
+    # SILICON V16 GEOMETRY
+    def create_si_mod_geometry_V16(self):
+        """
+        Implementing the V16 geometry for the silicon part (hexagonal modules which include partials)
+        """
+
+        with open('/eos/home-m/mmanoni/HGCAL_V16/V16_geojson_geometry/silicon_geometry_V16_eta_GT0.json', 'r') as file:
+            geojson_data = file.read()
+
+        geojson = json.loads(geojson_data)
+
+        # Initialize lists to hold the extracted data
+        layers, waferus, wafervs, hex_xs, hex_ys = [], [], [], [], []
+
+        # Extract data from GeoJSON features
+        for feature in geojson['features']:
+            properties = feature['properties']
+            geometry = feature['geometry']['coordinates'][0]
+
+            layers.append(properties['Layer'])
+            waferus.append(properties['wu'])
+            wafervs.append(properties['wv'])
+
+            hex_x = [coord[0] for coord in geometry]
+            hex_y = [coord[1] for coord in geometry]
+
+            hex_xs.append(hex_x)
+            hex_ys.append(hex_y)
+
+        # Create a DataFrame from the extracted data
+        df_geo = pd.DataFrame({
+            'ts_layer': layers,
+            'ts_wu': waferus,
+            'ts_wv': wafervs,
+            'hex_x': hex_xs,
+            'hex_y': hex_ys
+        })
+
+        return df_geo
+
+
+
+    # SCINTILLATOR GEOMETRY
+
+    def implement_scint_modules_id(self, df):
+        """
+        Implementing the ieta (ts_ieta) and iphi (ts_iphi) identifier for scintillator modules based on CMSSW
+        https://github.com/jbsauvan/cmssw/commit/a8a2c2c9a0cfe2745a6a523e2b3818e2124b80f0#diff-78500392da6bd14745d9ab56db0d0b182e62ba8dffae5616bd7afa71539b216dR980
+        """
         hSc_tcs_per_module_phi = 4
         hSc_back_layers_split = 8
         hSc_front_layers_split = 12
         hSc_layer_for_split = 40
 
-        df['ts_iphi'] = (df['tc_cv'] - 1) // hSc_tcs_per_module_phi
+        df['ts_iphi'] = (df['tc_cv'] - 1) // hSc_tcs_per_module_phi + 1 #Phi index 1-12
 
         split = hSc_front_layers_split
         if df['tc_layer'].iloc[0] > hSc_layer_for_split:
@@ -279,7 +324,93 @@ class Geometry():
 
         df['ts_ieta'] = df.apply(lambda row: 0 if row['tc_cu'] <= split else 1, axis=1)
 
-    def create_scint_mod_geometry(self, df):
+        return df
+
+    def order_vertices_clockwise(self, vertices):
+        centroid = Polygon(vertices).centroid
+        centroid_x, centroid_y = centroid.x, centroid.y
+        # Convert vertices list to NumPy array
+        vertices_array = np.array(vertices)
+        # Calculate angles with respect to centroid
+        angles = np.arctan2(vertices_array[:, 1] - centroid_y, vertices_array[:, 0] - centroid_x)
+        # Sort vertices based on angles
+        sorted_indices = np.argsort(angles)
+        ordered_vertices = vertices_array[sorted_indices]
+
+        return ordered_vertices.tolist()
+
+    def find_corresponding_y(self, x, all_coords):
+        closest_y = None
+        min_distance = float('inf')
+        for coord in all_coords:
+            for x_val, y_val in coord:
+                if x_val == x:
+                    distance = abs(y_val)
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_y = y_val
+        return closest_y
+
+    def find_corresponding_x(self, y, all_coords):
+        closest_x = None
+        min_distance = float('inf')
+        for coord in all_coords:
+            for x_val, y_val in coord:
+                if y_val == y:
+                    distance = abs(x_val)
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_x = x_val
+        return closest_x
+
+    def save_scint_mod_geo(self, merged_df, output_file):
+        print("Saving scintillator module geometries to GeoJSON")
+        features_scint_mod_poly = []
+
+        # Iterate over each row in the merged DataFrame
+        for _, row in merged_df.iterrows():
+            ts_ieta = row['ts_ieta']
+            ts_iphi = row['ts_iphi']
+            tc_layer = row['tc_layer']
+            ordered_vertices_list = row['vertices_clockwise']
+            #print(ordered_vertices_list)
+
+            # Convert string representation of vertices to list of floats
+            ordered_vertices = [list(map(float, vertex)) for vertex in ordered_vertices_list]
+
+            # Create a Shapely Polygon from the ordered vertices
+            polygon = Polygon(ordered_vertices)
+
+            # Convert Shapely polygon to GeoJSON feature
+            feature_scint_mod_poly = {
+                    'type': 'Feature',
+                    'geometry': mapping(polygon),  # Convert polygon to GeoJSON geometry
+                    'properties': {
+                        'Layer': tc_layer,
+                        'ieta': ts_ieta,
+                        'iphi': ts_iphi,
+                    }
+                }
+            features_scint_mod_poly.append(feature_scint_mod_poly)  # Add feature to the list
+
+        # Create GeoJSON FeatureCollection
+        feature_collection = {
+            'type': 'FeatureCollection',
+            'features': features_scint_mod_poly
+        }
+
+        # Write GeoJSON data to file
+        with open(output_file, 'w') as f:
+            json.dump(feature_collection, f, indent=4)
+
+        print("GeoJSON with scintillator module geometries saved to:", output_file)
+
+    def create_scint_mod_geometry(self, df, save_geojson=True):
+        """
+        Function that creates the Modules Scintillator geometry based on what is done at the moment in CMSSW - We assume that the geometry is the same for V11 and V16 geometries.
+
+        If save_geojson = True the geometry is saved into a geojson file
+        """
         # Group DataFrame by ts_ieta, ts_iphi, and tc_layer
         grouped = df.groupby(['ts_ieta', 'ts_iphi', 'tc_layer'])
         merged_geometries = []
@@ -325,95 +456,17 @@ class Geometry():
                 #print(f"Repeated vertices found in Layer {tc_layer}: {ordered_vertices}")
 
             # Append the result to the new DataFrame
+            #print("diamond_polygons", diamond_polygons)
+            #print("vertices_clockwise", ordered_vertices)
             merged_geometries.append({'ts_ieta': ts_ieta, 'ts_iphi': ts_iphi, 'tc_layer': tc_layer,
                                   'geometry': diamond_polygons, 'vertices_clockwise': ordered_vertices})
 
         merged_df = pd.DataFrame(merged_geometries)
 
-        self.save_scint_mod_geo(merged_df, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/scint_modules_geo.geojson')
+        if save_geojson:
+            self.save_scint_mod_geo(merged_df, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/scint_modules_geo_FINAL.geojson')
 
         return merged_df
-
-    def order_vertices_clockwise(self, vertices):
-        centroid = Polygon(vertices).centroid
-        centroid_x, centroid_y = centroid.x, centroid.y
-        # Convert vertices list to NumPy array
-        vertices_array = np.array(vertices)
-        # Calculate angles with respect to centroid
-        angles = np.arctan2(vertices_array[:, 1] - centroid_y, vertices_array[:, 0] - centroid_x)
-        # Sort vertices based on angles
-        sorted_indices = np.argsort(angles)
-        ordered_vertices = vertices_array[sorted_indices]
-
-        return ordered_vertices.tolist()
-
-    def find_corresponding_y(self, x, all_coords):
-        closest_y = None
-        min_distance = float('inf')
-        for coord in all_coords:
-            for x_val, y_val in coord:
-                if x_val == x:
-                    distance = abs(y_val)
-                    if distance < min_distance:
-                        min_distance = distance
-                        closest_y = y_val
-        return closest_y
-
-    def find_corresponding_x(self, y, all_coords):
-        closest_x = None
-        min_distance = float('inf')
-        for coord in all_coords:
-            for x_val, y_val in coord:
-                if y_val == y:
-                    distance = abs(x_val)
-                    if distance < min_distance:
-                        min_distance = distance
-                        closest_x = x_val
-        return closest_x
-            
-    def save_scint_mod_geo(self, merged_df, output_file):
-        print("Saving scintillator module geometries to GeoJSON")
-        features_scint_mod_poly = []
-
-        # Iterate over each row in the merged DataFrame
-        for _, row in merged_df.iterrows():
-            ts_ieta = row['ts_ieta']
-            ts_iphi = row['ts_iphi']
-            tc_layer = row['tc_layer']
-            ordered_vertices_list = row['vertices_clockwise']
-            #print(ordered_vertices_list)
-
-            # Convert string representation of vertices to list of floats
-            ordered_vertices = [list(map(float, vertex)) for vertex in ordered_vertices_list]
-
-            # Create a Shapely Polygon from the ordered vertices
-            polygon = Polygon(ordered_vertices)
-
-            # Convert Shapely polygon to GeoJSON feature
-            feature_scint_mod_poly = {
-                    'type': 'Feature',
-                    'geometry': mapping(polygon),  # Convert polygon to GeoJSON geometry
-                    'properties': {
-                        'Layer': tc_layer,
-                        'ieta': ts_ieta,
-                        'iphi': ts_iphi,
-                    }
-                }
-            features_scint_mod_poly.append(feature_scint_mod_poly)  # Add feature to the list
-
-        # Create GeoJSON FeatureCollection
-        feature_collection = {
-            'type': 'FeatureCollection',
-            'features': features_scint_mod_poly
-        }
-
-        # Write GeoJSON data to file
-        with open(output_file, 'w') as f:
-            json.dump(feature_collection, f, indent=4)
-
-        print("GeoJSON with scintillator module geometries saved to:", output_file)
-
-    
     
     #Reading geojson files
 
