@@ -39,18 +39,6 @@ class Algorithms():
             # Get unique layer indices for the current event
             unique_layers = df_event.index.get_level_values('layer').unique()
 
-            # Filter layers if required
-            if subdet == 'CEE':
-                print("CEE subdet ...")
-                unique_layers = unique_layers[unique_layers < 29]
-            elif subdet == 'CEH':
-                print("CEH subdet ...")
-                unique_layers = unique_layers[unique_layers >= 29]
-            else:
-                # No layer selection
-                print("CEE + CEH ...")
-                unique_layers = unique_layers
-
             # Iterate over each layer for the current event
             for layer_idx in unique_layers:
                 layer_df = df_event.loc[df_event.index.get_level_values('layer') == layer_idx]
@@ -144,16 +132,6 @@ class Algorithms():
             bin_pt_by_layer = {}
             unique_layers = df_event.index.get_level_values('layer').unique()
 
-            if subdet == 'CEE':
-                print("CEE subdet ...")
-                unique_layers = unique_layers[unique_layers < 29]
-            elif subdet == 'CEH':
-                print("CEH subdet ...")
-                unique_layers = unique_layers[unique_layers >= 29]
-            else:
-                print("CEE + CEH subdet ...")
-                unique_layers = unique_layers
-
             for layer_idx in unique_layers:
                 layer_df = df_event.loc[df_event.index.get_level_values('layer') == layer_idx]
 
@@ -219,15 +197,6 @@ class Algorithms():
 
             # Get unique layer indices for the current event
             unique_layers = df_event.index.get_level_values('layer').unique()
-
-            if subdet == 'CEE':
-                print("CEE subdet ...")
-                unique_layers = unique_layers[unique_layers < 29]
-            elif subdet == 'CEH':
-                print("CEH subdet ...")
-                unique_layers = unique_layers[unique_layers >= 29]
-            else:
-                print("CEE + CEH subdet ...")
 
             # Iterate over unique layer indices
             for layer_idx in unique_layers:

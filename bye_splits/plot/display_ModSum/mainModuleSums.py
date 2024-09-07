@@ -30,7 +30,7 @@ import geometryMS
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Interactive Grid Comparison")
 
-    parser.add_argument("--subdet", default='all_subdet', help="Select subdetector (CEE, CEH, all_subdet)")
+    parser.add_argument("--subdet", type=int, default=1, help="1:CEE (has only silicon layers), 2: CEH - only silicon part, 3: CEH - only scint part, 4:CEH, all layers")
     parser.add_argument("--event", default='5492', help="Select event number or -1 for all events")
     parser.add_argument("--n", type=int, default=None, help="Process the first n events")
     parser.add_argument("--algo", default='8towers', help="Select algorithm (baseline, area_overlap, 8towers)")
@@ -46,6 +46,8 @@ def main(subdet, event, particle, algo, n, geom):
     helper = helperMS.Helper()
     geometry = geometryMS.Geometry()
 
+    save_tower_bins = False
+
     #file_path = f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/DoublePhotonsPU0_3k_V11/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5'
     if geom=='V11':
         print("using V11 geom")
@@ -60,11 +62,11 @@ def main(subdet, event, particle, algo, n, geom):
         )
 
     # Method that retrieves events and process the data with the geometry
-    data, events_to_process = process.get_data_new(event,n, geom)
-    print("DATA", data.columns) #qui mantengo ancora l'informazione sull'evento!
+    data, events_to_process = process.get_data_new(event,n,geom,subdet)
+    #print("DATA", data.columns) #qui mantengo ancora l'informazione sull'evento!
 
     data_gen = process.get_genpart_data(file_path, event, events_to_process, n)
-    print("Dataframe columns",data_gen['event'])
+    #print("Dataframe columns",data_gen['event'])
 
     #helper.read_hdf5_structure(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/photons_manoni/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5')
     #helper.read_all_block0_values(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/photons_manoni/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5')
@@ -72,9 +74,6 @@ def main(subdet, event, particle, algo, n, geom):
     bin_geojson_filename = '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_with_arcs.geojson'
     hex_geojson_filename = '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_CMSSW.geojson'
     scint_geojson_filename = '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/scint_modules_geo.geojson'
-
-    hdf5_filename = ('/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/'
-    'plot/display_ModSum/hdf5_files/overlap_data_{particle}_{event}_okay.h5')
 
     #overlap = process.eval_hex_bin_overlap(data, bin_geojson_filename,  hdf5_filename)
 
@@ -95,10 +94,10 @@ def main(subdet, event, particle, algo, n, geom):
     #bins_data, hexagons_data, scint_data = geometry.read_geojson_files(bin_geojson_filename, hex_geojson_filename, scint_geojson_filename)
     #plotMS.plot_full_geom(bins_data, hexagons_data, scint_data, 'plot_layers', plot_type='all')
 
-    towers_bins = process.create_bin_df_new(initial_kw, geom)
-    #print("towers bins", towers_bins)
-    #print("towers bins col", towers_bins.columns)
-    process.ModSumToTowers(initial_kw, data , subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename, data_gen, towers_bins)
+    if save_tower_bins:
+        process.create_and_save_tower_bins(initial_kw, geom) #create and save tower bins
+
+    process.ModSumToTowers(initial_kw, data , subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, data_gen, geom)
 
     #geometry.save_bin_geo(towers_bins, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_with_arcs.geojson', f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_only_vertices.geojson')
     #geometry.save_bin_hex(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_CMSSW.geojson')

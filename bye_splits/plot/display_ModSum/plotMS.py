@@ -362,8 +362,8 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     print("plotting eta_phi_towers")
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    print ("DATA GEN", data_gen)
-    print ("DATA ", df_baseline_proj)
+    #print ("DATA GEN", data_gen)
+    #print ("DATA ", df_baseline_proj)
     # Plotting the grid of bins
     initial_kw = {
         'NbinsEta': 20,
@@ -485,6 +485,9 @@ def plot_hex_bin_overlap_save(hdf5_filename, output_folder):
                 plt.close()    
 
 def plot_scint_tiles(df):
+    """
+    This function plots from the original ds_geom['sci'] geometry from Bruno all the TCs of the scintillator
+    """
     for layer in df['tc_layer'].unique():
         print("layer num", layer)
         layer_df = df[df['tc_layer'] == layer]
@@ -709,7 +712,7 @@ def plot_towers_xy_grid(df_baseline_proj, data_gen, algo, event, particle, subde
     print("plotting xy_towers")
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    print("DATA GEN", data_gen)
+    #print("DATA GEN", data_gen)
     # Plotting the grid of bins
     initial_kw = {
         'NbinsEta': 20,

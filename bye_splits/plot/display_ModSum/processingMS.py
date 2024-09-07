@@ -67,7 +67,7 @@ class Processing():
             print("Unrecognized geom value. Please provide 'V11' or 'V16'.")
             #"/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/new_OKAY/fill_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5"
 
-    def get_data_new(self, event=None, n=None, geom=None):
+    def get_data_new(self, event=None, n=None, geom=None, subdet=None):
         # Check if the HDF5 file exists
         self.filestore(geom)
         if not os.path.exists(self.filename):
@@ -75,14 +75,14 @@ class Processing():
         # Read the list of events from the HDF5 file
         with h5py.File(self.filename, 'r') as file:
             self.list_events = list(set([key.split('_')[1] for key in file.keys()]))
-        print(f"List of events in HDF5 file: {self.list_events}")   
-        print(f"Number of events in HDF5 file:",  len(self.list_events))  
+        #print(f"List of events in HDF5 file: {self.list_events}")   
+        print(f"Number of events in HDF5 file:",  len(self.list_events)) 
 
         # If no event is specified, choose a random one
         if event is None:
             events_to_process = random.choice(self.list_events)
             print(f"Selected random event: {events_to_process}")
-            processed_event_df = self.get_event(events_to_process,geom)
+            processed_event_df = self.get_event(events_to_process,geom, subdet)
 
         elif event == '-1':
             events_to_process = self.list_events
@@ -90,18 +90,18 @@ class Processing():
                 print("n", n)
                 events_to_process = events_to_process[:n]
             print(f"Processing events: {events_to_process}")
-            processed_event_df = self.get_allevents(events_to_process, geom)
+            processed_event_df = self.get_allevents(events_to_process, geom, subdet)
 
         else:
             print(f"Selected event: {event}")
             # If the specified event is not in the list, raise an exception
             if str(event) not in self.list_events:
                 raise ValueError(f"Event {event} not found in the HDF5 file.")
-            processed_event_df = self.get_event(event,geom)
+            processed_event_df = self.get_event(event,geom, subdet)
             events_to_process = event
         return processed_event_df, events_to_process
 
-    def get_event(self, event, geom):
+    def get_event(self, event, geom, subdet):
         with h5py.File(self.filename, 'r') as file:
             for key in file.keys():
                 if event in key and 'ts' in key:
@@ -115,16 +115,16 @@ class Processing():
                     print("df_ts ETA", df_ts['ts_eta'].unique())
                     print("df_ts STOP", df_ts)
                     if geom == 'V11':
-                        silicon_df= self.process_event(df_ts)
+                        silicon_df= self.process_event(df_ts, subdet)
                         print("silicon_df_proc V11", silicon_df.columns)
                     if geom == 'V16':
-                        silicon_df= self.process_event_V16(df_ts)
+                        silicon_df= self.process_event_V16(df_ts, subdet)
                         print("silicon_df_V16", silicon_df.columns)
                         print("silicon_df_V16", silicon_df)
 
                     return silicon_df
     
-    def get_allevents(self, events_to_process, geom):
+    def get_allevents(self, events_to_process, geom, subdet):
         all_ts_event_dfs = []
         all_tc_event_dfs = []
 
@@ -148,15 +148,14 @@ class Processing():
                             all_tc_event_dfs.append(df_tc)  # Append each tc event data frame to the list
         
         combined_ts_df = pd.concat(all_ts_event_dfs, ignore_index=True)
-        combined_tc_df = pd.concat(all_tc_event_dfs, ignore_index=True)
-        print("tc data dataframe", combined_tc_df.columns)
+        #combined_tc_df = pd.concat(all_tc_event_dfs, ignore_index=True)
+        #print("tc data dataframe", combined_tc_df.columns)
         
         # Process the combined ts DataFrame
         if geom == 'V11':
-            processed_combined_ts_df = self.process_event(combined_ts_df) #FIXME - Temporary adding tc data (combined_ts_df,combined_tc_df)
+            processed_combined_ts_df = self.process_event(combined_ts_df, subdet) #FIXME - Temporary adding tc data (combined_ts_df,combined_tc_df)
         if geom == 'V16': 
-            print("processing all events V16")
-            processed_combined_ts_df = self.process_event_V16(combined_ts_df)
+            processed_combined_ts_df = self.process_event_V16(combined_ts_df, subdet)
             lenght = len(processed_combined_ts_df)
             print("lenght df",lenght)
         return processed_combined_ts_df
@@ -259,52 +258,68 @@ class Processing():
 
         return shifted_hex_df
 
-    def process_event_V16(self, df_ts):
+    def process_event_V16(self, df_ts, subdet):
         """
         Merging V16 data with geometry, separately for silicon and scintillator
         """
-        print("Processing events V16 ...")
+        print("Processing V16 geometry ...")
         #x,y = self.sph2cart(data_gen['gen_eta'], data_gen['gen_phi'], z=322.)
 
-        #SILICON V16
-        df_geo_si_V16 = self.geometry.create_si_mod_geometry_V16()
+        if subdet == 1 or subdet ==2:
+            print(f"Processing SUBDET {subdet}")
 
-        # Merge the DataFrames
-        df_si_merged = pd.merge(left=df_ts, right=df_geo_si_V16, how='inner', on=['ts_layer', 'ts_wu', 'ts_wv'])
-        df_si_merged=df_si_merged[df_si_merged['ts_mipPt'] > 0.5]
+            #SILICON V16
+            df_geo_si_V16 = self.geometry.create_si_mod_geometry_V16()
 
-        #plotMS.plot_layer_hexagons(df_si_merged, 11, x,y)
+            # Merge the DataFrames
+            df_si_merged = pd.merge(left=df_ts, right=df_geo_si_V16, how='inner', on=['ts_layer', 'ts_wu', 'ts_wv'])
+            df_si_merged=df_si_merged[df_si_merged['ts_mipPt'] > 0.5]
+            df_si_merged_subdet = df_si_merged[df_si_merged['ts_subdet'] == subdet]
 
-        #SCINTILLATOR V16
-        sci_update = {'triggercellieta' : 'tc_cu',
-                      'triggercelliphi' : 'tc_cv',
-                      'layer'           : 'tc_layer',
-                      'waferu'          : 'tc_wu',
-                      'waferv'          : 'tc_wv'}
+            # Collect all unique ts_layers
+            unique_ts_layers = sorted(df_si_merged_subdet['ts_layer'].unique())
 
-        self.ds_geom['sci'] = self.ds_geom['sci'].rename(columns=sci_update)
-        df = self.geometry.implement_scint_modules_id(self.ds_geom['sci'])
-        scint_mod_geom = self.geometry.create_scint_mod_geometry(df, save_geojson = True)
-        #plotMS.plot_scint_tiles(self.ds_geom['sci'])
+            # Print the unique sequence of ts_layers
+            print(f"Unique ts_layers for subdet {subdet}: {unique_ts_layers}")
 
-        sci_merge = {'ts_ieta' : 'ts_wu',
-                      'ts_iphi' : 'ts_wv',
-                      'tc_layer' : 'ts_layer'}
+            #plotMS.plot_layer_hexagons(df_si_merged, 11, x,y)
+            #print(f"df_subdet_{subdet} ts_subdet", df_si_merged_subdet["ts_subdet"])
+            print(f"df_subdet_{subdet}", df_si_merged_subdet.columns)
+            return df_si_merged_subdet
 
-        scint_mod_geom = scint_mod_geom.rename(columns=sci_merge)
-        df_ts_filtered = df_ts[df_ts['ts_subdet'] == 3] #filtering to select only SUBDET 3 corresponding to the scintillator part
+        elif subdet == 3:
+            print(f"Processing subdet {subdet}: CEH --> only scintillator part")
 
-        # Merge dataframes
-        scintillator_df = pd.merge(left=df_ts_filtered, right=scint_mod_geom, how='inner',
-                                           on=['ts_layer', 'ts_wu', 'ts_wv'])
-        print("df_ts_filtered COL", df_ts_filtered.columns)
-        print("df_ts_filtered", df_ts_filtered)
-        print("scintillator_df COL", scintillator_df.columns)
-        print("scintillator_df ALL", scintillator_df)
-        #print("scintillator_df", scintillator_df['geometry'])
-        print("scintillator_df VERTEX", scintillator_df['vertices_clockwise'])
+            #SCINTILLATOR V16
+            sci_update = {'triggercellieta' : 'tc_cu',
+                        'triggercelliphi' : 'tc_cv',
+                        'layer'           : 'tc_layer',
+                        'waferu'          : 'tc_wu',
+                        'waferv'          : 'tc_wv'}
 
-        return df_si_merged
+            self.ds_geom['sci'] = self.ds_geom['sci'].rename(columns=sci_update)
+            df = self.geometry.implement_scint_modules_id(self.ds_geom['sci'])
+            scint_mod_geom = self.geometry.create_scint_mod_geometry(df, save_geojson = True)
+            #plotMS.plot_scint_tiles(self.ds_geom['sci'])
+
+            sci_merge = {'ts_ieta' : 'ts_wu',
+                        'ts_iphi' : 'ts_wv',
+                        'tc_layer' : 'ts_layer'}
+
+            scint_mod_geom = scint_mod_geom.rename(columns=sci_merge)
+            df_ts_filtered = df_ts[df_ts['ts_subdet'] == 3] #filtering to select only SUBDET 3 corresponding to the scintillator part
+
+            # Merge dataframes
+            scintillator_df = pd.merge(left=df_ts_filtered, right=scint_mod_geom, how='inner',
+                                            on=['ts_layer', 'ts_wu', 'ts_wv'])
+            print("df_ts_filtered COL", df_ts_filtered.columns)
+            print("df_ts_filtered", df_ts_filtered)
+            print("scintillator_df COL", scintillator_df.columns)
+            print("scintillator_df ALL", scintillator_df)
+            #print("scintillator_df", scintillator_df['geometry'])
+            print("scintillator_df VERTEX", scintillator_df['vertices_clockwise'])
+
+            return scintillator_df
 
     def shift_hex_values(self, silicon_df_proc, df_geom, df_ts):
         """Shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW),
@@ -482,7 +497,7 @@ class Processing():
         return closest_vertices
     
     
-    def create_bin_df_new(self, kw, geom ):
+    def create_and_save_tower_bins(self, kw, geom ):
 
         if geom=='V16':
             ts_keep = { 'waferu'       : 'ts_wu',
@@ -554,8 +569,8 @@ class Processing():
                     print(bin_info)
                 print('\n')'''
 
-        return df_bins
-    
+        self.geometry.save_bin_geo(df_bins, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_with_arcs.geojson', f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_only_vertices.geojson')
+
     def update_bins(self, baseline_df, bins_df):
         # Filter the bins from the first layer
         first_layer_bins = bins_df[bins_df['Layer'] == 1]
@@ -581,7 +596,64 @@ class Processing():
         #print("Final df_baseline", final_df)
         return final_df
 
-    def apply_update_to_each_event(self, df, bins_df):
+    def apply_update_to_each_event(self, df, geojson_bins):
+        print("apply update to each event")
+        #print("bin df", bins_df)
+        #print("bin df", bins_df.columns)
+
+        # Load the GeoJSON file
+        with open(geojson_bins) as f:  # Replace 'geojson_bins.json' with the actual file path
+            bin_geojson = json.load(f)
+
+        # Initialize lists to hold extracted data
+        bins_info = []
+
+        # Iterate over each feature in the GeoJSON
+        for feature in bin_geojson['features']:
+            layer = feature['properties']['Layer']
+            z_values = feature['properties']['Z_value']
+
+            # Extract geometry coordinates (X and Y vertices)
+            coordinates = feature['geometry']['coordinates'][0]
+            x_vertices = [coord[0] for coord in coordinates]
+            y_vertices = [coord[1] for coord in coordinates]
+
+            # Extract Eta and Phi vertices from properties
+            eta_vertices = feature['properties']['Eta_vertices']
+            phi_vertices = feature['properties']['Phi_vertices']
+
+            # Prepare the layer bins data
+            layer_bins = [{
+                'X_Vertices': x_vertices,
+                'Y_Vertices': y_vertices,
+                'Eta_Vertices': eta_vertices,
+                'Phi_Vertices': phi_vertices
+            }]
+
+            # Append to bins_info
+            bins_info.append({
+                'Layer': layer,
+                'Z_value': z_values,
+                'Bins': layer_bins
+            })
+
+        # Create DataFrame from the bins_info list
+        df_bins = pd.DataFrame(bins_info)
+        #print("df_ORA",df_bins )
+
+        # Group the DataFrame by 'Layer' and combine 'Bins' by concatenating lists
+        grouped_bins = df_bins.groupby('Layer').agg({
+            'Z_value': 'first',  # Retain the first Z_value for each layer
+            'Bins': lambda x: sum(x, [])  # Concatenate lists of dictionaries in the 'Bins' column
+        }).reset_index()
+
+        print("df_ORA",grouped_bins["Bins"] )
+
+
+
+
+
+        #df bins qua da non uare, leggere goejson e ricreare stesso df
         all_event_dfs = []
 
         unique_events = df['event'].unique()
@@ -593,7 +665,7 @@ class Processing():
             event_df = df[df['event'] == event]
 
             #Add bins that have 0 overlap with the hexagons with pt 0
-            updated_event_df = self.update_bins(event_df, bins_df)
+            updated_event_df = self.update_bins(event_df, grouped_bins)
 
             # Add the event column back
             updated_event_df['event'] = event
@@ -610,7 +682,7 @@ class Processing():
 
         return final_df, summed_df
             
-    def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, hdf5_filename, data_gen, bins_df):
+    def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, data_gen, geom):
         print('Mod sum to towers')
 
         #print("data", data.columns)
@@ -625,11 +697,11 @@ class Processing():
 
 
         #overlap_data = self.read_hdf5_file(hdf5_filename)
-        #print("OVERLAP DATA INPUT ", overlap_data)
+        #print("DATA OGGI ", data)
         #print("OVERLAP DATA INPUT columns ", overlap_data.columns)
 
-        hexagon_info_df = self.eval_hex_bin_overlap_OK(data, bin_geojson_filename)
-        #print("QUIIIIII, hexagon_info_df", hexagon_info_df)
+        hexagon_info_df = self.eval_hex_bin_overlap_OK(data, bin_geojson_filename, geom)
+        print("eval overlap dataframe", hexagon_info_df.columns)
         #print("QUIIIIII, hexagon_info_df COLUMNS", hexagon_info_df.columns)
 
         if algo == 'baseline':
@@ -644,7 +716,7 @@ class Processing():
         else:
             raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap' or '8towers'.")
 
-        df , df_sum = self.apply_update_to_each_event(df_algo, bins_df)
+        df , df_sum = self.apply_update_to_each_event(df_algo, bin_geojson_filename)
 
         print("Eta/Phi resolution evaluation...")
         df_resolution = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, window_size=8, subwindow_size=5)
@@ -674,7 +746,7 @@ class Processing():
         ]
         bin_distances.sort(key=lambda x: x[1])  # Sort by distance
         closest_bins = [bin_dist[0] for bin_dist in bin_distances[:35]] #takes total of 1.8 sec per event 
-
+        
         hex_info = []
         for bin_feature in closest_bins:
             bin_polygon = bin_feature['geometry']
@@ -708,10 +780,8 @@ class Processing():
             'bins_overlapping': hex_info
         }
 
-
-    def eval_hex_bin_overlap_OK(self, data, df_bin):
+    def eval_hex_bin_overlap_OK(self, data, df_bin, geom):
         print("Evaluating overlap between hexagons and towers bins layer by layer")
-
 
         with open(df_bin) as f:
             bin_geojson = json.load(f)
@@ -730,7 +800,6 @@ class Processing():
             ] for layer_name in layer_names
         }
 
-        # Precompute hexagon geometries
         hex_geometries = {
             (event, layer_name): [
                 {
@@ -745,14 +814,6 @@ class Processing():
                 } for hex_row in event_data[event_data['ts_layer'] == layer_name].itertuples()
             ] for event, event_data in event_groups for layer_name in layer_names
         }
-
-        # Check for hexagons with fewer than 6 vertices
-        for (event, layer_name), hex_list in hex_geometries.items():
-            for hex_item in hex_list:
-                hex_polygon = hex_item['hex_polygon']
-                # Check if the number of vertices is less than 6
-                if len(hex_polygon.exterior.coords) < 6:
-                    print(f"Warning: Event '{event}', Layer '{layer_name}' has a hexagon with fewer than 6 vertices: {list(hex_polygon.exterior.coords)}")
 
         hierarchical_data = []
 
