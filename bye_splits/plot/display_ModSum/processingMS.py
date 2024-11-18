@@ -11,6 +11,7 @@ import json
 import h5py
 import re
 import plotly.express.colors as px
+import matplotlib.patches as PolygonPatch
 import random
 import logging
 import time
@@ -89,7 +90,7 @@ class Processing():
             if n is not None:
                 print("n", n)
                 events_to_process = events_to_process[:n]
-            print(f"Processing events: {events_to_process}")
+            #print(f"Processing events: {events_to_process}")
             processed_event_df = self.get_allevents(events_to_process, geom, subdet)
 
         else:
@@ -111,9 +112,13 @@ class Processing():
                     df_ts = pd.DataFrame(dataset[:], columns=column_names)
                     df_ts['event'] = int(event)
                     print("df_ts STOP", df_ts.columns)
-                    print("df_ts LAYERS", df_ts['ts_layer'].unique())
-                    print("df_ts ETA", df_ts['ts_eta'].unique())
-                    print("df_ts STOP", df_ts)
+                    print("df_ts LAYERS", sorted(df_ts['ts_layer'].unique()) )
+                    filtered_df_sub3 = df_ts[df_ts['ts_subdet'] == 3]
+                    unique_layers_subdet_3 = sorted(filtered_df_sub3['ts_layer'].unique())
+                    print("Unique Layers for  == 3:", unique_layers_subdet_3)
+
+                    #print("df_ts ETA", df_ts['ts_eta'].unique())
+                    #print("df_ts values", df_ts)
                     if geom == 'V11':
                         silicon_df= self.process_event(df_ts, subdet)
                         print("silicon_df_proc V11", silicon_df.columns)
@@ -158,6 +163,7 @@ class Processing():
             processed_combined_ts_df = self.process_event_V16(combined_ts_df, subdet)
             lenght = len(processed_combined_ts_df)
             print("lenght df",lenght)
+            print("output DF V16 process event", processed_combined_ts_df.columns)
         return processed_combined_ts_df
     
     def get_genpart_data(self, file_path, block0_value, events_to_process, n, group_name='df'):
@@ -270,6 +276,7 @@ class Processing():
 
             #SILICON V16
             df_geo_si_V16 = self.geometry.create_si_mod_geometry_V16()
+            #print("df_geo_si_V16", df_geo_si_V16)
 
             # Merge the DataFrames
             df_si_merged = pd.merge(left=df_ts, right=df_geo_si_V16, how='inner', on=['ts_layer', 'ts_wu', 'ts_wv'])
@@ -299,7 +306,10 @@ class Processing():
 
             self.ds_geom['sci'] = self.ds_geom['sci'].rename(columns=sci_update)
             df = self.geometry.implement_scint_modules_id(self.ds_geom['sci'])
-            scint_mod_geom = self.geometry.create_scint_mod_geometry(df, save_geojson = True)
+            scint_mod_geom = self.geometry.create_scint_mod_geometry(df, save_geojson = False)
+
+            print("scint_mod_geom", scint_mod_geom)
+            #print("scint_mod_geom_2", scint_mod_geom_2)
             #plotMS.plot_scint_tiles(self.ds_geom['sci'])
 
             sci_merge = {'ts_ieta' : 'ts_wu',
@@ -317,9 +327,28 @@ class Processing():
             print("scintillator_df COL", scintillator_df.columns)
             print("scintillator_df ALL", scintillator_df)
             #print("scintillator_df", scintillator_df['geometry'])
-            print("scintillator_df VERTEX", scintillator_df['vertices_clockwise'])
+            #print("scintillator_df VERTEX", scintillator_df['vertices_clockwise'])
 
             return scintillator_df
+
+        elif subdet == 4:
+            print("Processing combined subdet 2 and 3 (all CEH)")
+
+            # Get the DataFrames for subdet 2 and 3
+            df_subdet_2 = self.process_event_V16(df_ts, subdet=2)
+            df_subdet_3 = self.process_event_V16(df_ts, subdet=3)
+
+            # Combine the two DataFrames
+            df_combined = pd.concat([df_subdet_2, df_subdet_3], ignore_index=True)
+
+            print("df_combined COL", df_combined.columns)
+            print("df_combined ALL", df_combined)
+
+            return df_combined
+
+        else:
+            print(f"Subdet {subdet} is not recognized.")
+            return None
 
     def shift_hex_values(self, silicon_df_proc, df_geom, df_ts):
         """Shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW),
@@ -647,7 +676,7 @@ class Processing():
             'Bins': lambda x: sum(x, [])  # Concatenate lists of dictionaries in the 'Bins' column
         }).reset_index()
 
-        print("df_ORA",grouped_bins["Bins"] )
+        #print("df_ORA",grouped_bins["Bins"] )
 
 
 
@@ -700,8 +729,14 @@ class Processing():
         #print("DATA OGGI ", data)
         #print("OVERLAP DATA INPUT columns ", overlap_data.columns)
 
+        #hexagon_info_df = self.eval_hex_bin_overlap_scint(data, bin_geojson_filename, geom)
+
         hexagon_info_df = self.eval_hex_bin_overlap_OK(data, bin_geojson_filename, geom)
-        print("eval overlap dataframe", hexagon_info_df.columns)
+        #print("eval overlap dataframe", hexagon_info_df.columns)
+        print(hexagon_info_df.index.get_level_values('event').unique())
+
+        #plotMS.plot_hex_bins(hexagon_info_df)
+
         #print("QUIIIIII, hexagon_info_df COLUMNS", hexagon_info_df.columns)
 
         if algo == 'baseline':
@@ -713,20 +748,24 @@ class Processing():
         elif algo == '8towers':
             df_algo = self.algorithms.area_overlap_8Towers_by_event(hexagon_info_df, subdet)
         
+        elif algo == '16towers':
+            df_algo = self.algorithms.area_overlap_16Towers_by_event(hexagon_info_df, subdet)
+
         else:
             raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap' or '8towers'.")
 
         df , df_sum = self.apply_update_to_each_event(df_algo, bin_geojson_filename)
 
-        print("Eta/Phi resolution evaluation...")
+        #print("Eta/Phi resolution evaluation...")
         df_resolution = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, window_size=8, subwindow_size=5)
         self.resolution.save_eta_phi_differences(df_resolution, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_hadd_123_subw_5x5_OK.txt')
+
         #plotMS.plot_energy_ratio_histogram()
         #plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
         #print("data_gen", data_gen.columns)
         #print("df_sum", df_sum.columns)
         #print("event", event)
-        #plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet)
+        plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet)
         #plotMS.plot_towers_xy_grid(df_sum, data_gen, algo, event, particle, subdet)
 
     def compute_overlap(self, hex_polygon, hex_centroid, hex_properties, bins_layer):
@@ -782,6 +821,8 @@ class Processing():
 
     def eval_hex_bin_overlap_OK(self, data, df_bin, geom):
         print("Evaluating overlap between hexagons and towers bins layer by layer")
+        #print(data.columns)
+        #print(df_bin)
 
         with open(df_bin) as f:
             bin_geojson = json.load(f)
