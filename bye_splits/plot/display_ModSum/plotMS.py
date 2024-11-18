@@ -591,29 +591,131 @@ def plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max,
         polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='black', facecolor='none')
         ax.add_patch(polygon)
 
-    # Highlight the 3x3 subwindow
-    subwindow_bins = window_bins[
-        (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] < eta_end) &
-        (window_bins['phi_center'] >= phi_start) & (window_bins['phi_center'] < phi_end)
-    ]
-
-    for idx, row in subwindow_bins.iterrows():
-        polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='red', facecolor='none')
-        ax.add_patch(polygon)
-
     # Plot the particle position with a red cross
     plt.scatter(particle_eta, particle_phi, color='red', marker='x')
 
 
     # Display the plot
-    plt.xlim(eta_min, eta_max)
-    plt.ylim(phi_min, phi_max)
+    #plt.xlim(eta_min, eta_max)
+    #plt.ylim(phi_min, phi_max)
     plt.xlabel('Eta')
     plt.ylabel('Phi')
     plt.title(f'3x3 Subwindow from ({eta_start}, {phi_start}) to ({eta_end}, {phi_end})')
     plt.savefig(f'Subwindow_from_{eta_start}_{phi_start}_{eta_end}_{phi_end}.png')
     plt.show()
     plt.close()
+
+
+def plot_window_with_wraparound_only_window(window_bins_part1, window_bins_part2, eta_min, eta_max, phi_min, phi_max, particle_eta, particle_phi):
+    # Create a figure and axis
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Plot the Part 1 bins (from phi_min to +pi)
+    for idx, row in window_bins_part1.iterrows():
+        polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='blue', facecolor='none', alpha=0.7, label='Part 1' if idx == 0 else "")
+        ax.add_patch(polygon)
+
+    # Plot the Part 2 bins (from -pi to phi_max)
+    for idx, row in window_bins_part2.iterrows():
+        polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='red', facecolor='none', alpha=0.7, label='Part 2' if idx == 0 else "")
+        ax.add_patch(polygon)
+
+    # Plot the overall eta and phi limits
+    ax.axhline(y=np.pi, color='grey', linestyle='--', label='Phi = +pi')
+    ax.axhline(y=-np.pi, color='grey', linestyle='--', label='Phi = -pi')
+
+    # Highlight the eta and phi boundaries
+    ax.plot([eta_min, eta_max, eta_max, eta_min, eta_min], [phi_min, phi_min, phi_max, phi_max, phi_min], 'k--', label='Window Bounds')
+
+    # Plot the generated particle's eta and phi position
+    ax.scatter(particle_eta, particle_phi, color='black', marker='x', s=100, label='Generated Particle')
+
+    # Set labels and title
+    ax.set_xlabel('Eta Center')
+    ax.set_ylabel('Phi Center')
+    ax.set_title('Window Bins with Wrap-Around in Phi')
+    ax.legend()
+    ax.grid(True, linestyle='--', alpha=0.5)
+
+    # Set axis limits for better visualization
+    ax.set_xlim(eta_min - 0.1, eta_max + 0.1)
+    ax.set_ylim(-np.pi - 0.1, np.pi + 0.1)
+
+    plt.show()
+
+def plot_window_with_wraparound(window_bins_part1, window_bins_part2, eta_min, eta_max, phi_min, phi_max, particle_eta, particle_phi, eta_start, eta_end, phi_start, phi_end):
+    """
+    Plots the main window (12x12) and a moving subwindow (3x3) to visualize how the subwindows are iterated over.
+
+    Parameters:
+    - window_bins_part1: DataFrame for the first part of the window, handling wrap-around cases
+    - window_bins_part2: DataFrame for the second part of the window, handling wrap-around cases
+    - eta_min, eta_max: Bounds of the main window in eta
+    - phi_min, phi_max: Bounds of the main window in phi
+    - particle_eta, particle_phi: Coordinates of the particle to plot as a red cross
+    - eta_start, eta_end: Bounds of the subwindow in eta
+    - phi_start, phi_end: Bounds of the subwindow in phi
+    """
+
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Plot the main window bins (part 1)
+    for idx, row in window_bins_part1.iterrows():
+        polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='black', facecolor='none')
+        ax.add_patch(polygon)
+
+    # Plot the main window bins (part 2)
+    for idx, row in window_bins_part2.iterrows():
+        polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='black', facecolor='none')
+        ax.add_patch(polygon)
+
+    # Highlight the subwindow in red
+    if phi_start > phi_end:
+        # Handle wrap-around case for the subwindow
+        # Part 1: From phi_start to +pi
+        subwindow_bins_part1 = window_bins_part1[
+            (window_bins_part1['eta_center'] >= eta_start) & (window_bins_part1['eta_center'] <= eta_end) &
+            (window_bins_part1['phi_center'] >= phi_start) & (window_bins_part1['phi_center'] <= np.pi)
+        ]
+        subwindow_bins_part2 = window_bins_part2[
+            (window_bins_part2['eta_center'] >= eta_start) & (window_bins_part2['eta_center'] <= eta_end) &
+            (window_bins_part2['phi_center'] >= -np.pi) & (window_bins_part2['phi_center'] <= phi_end)
+        ]
+        for idx, row in subwindow_bins_part1.iterrows():
+            polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='red', facecolor='none')
+            ax.add_patch(polygon)
+        for idx, row in subwindow_bins_part2.iterrows():
+            polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='red', facecolor='none')
+            ax.add_patch(polygon)
+    else:
+        # Normal case for the subwindow
+        subwindow_bins = window_bins_part1[
+            (window_bins_part1['eta_center'] >= eta_start) & (window_bins_part1['eta_center'] <= eta_end) &
+            (window_bins_part1['phi_center'] >= phi_start) & (window_bins_part1['phi_center'] <= phi_end)
+        ]
+        for idx, row in subwindow_bins.iterrows():
+            polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='red', facecolor='none')
+            ax.add_patch(polygon)
+
+    # Plot the particle position with a red cross
+    ax.scatter(particle_eta, particle_phi, color='red', marker='x', label='Particle Position')
+
+    # Set axis labels and title
+    ax.set_xlabel('Eta')
+    ax.set_ylabel('Phi')
+    ax.set_title('Window and Subwindow Visualization')
+
+    # Set axis limits
+    # Set axis limits for better visualization
+    ax.set_xlim(eta_min - 0.1, eta_max + 0.1)
+    ax.set_ylim(-np.pi - 0.1, np.pi + 0.1)
+
+    # Add legend
+    ax.legend()
+
+    # Show the plot
+    plt.savefig("prova_window.png")
 
 
 def plot_eta_phi_resolution(results_df, algo, event, particle, subdet):
