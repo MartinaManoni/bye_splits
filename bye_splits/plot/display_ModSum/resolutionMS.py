@@ -7,6 +7,7 @@ import logging
 from data_handle.data_process import *
 import pandas as pd
 import numpy as np
+import plotMS
 
 parent_dir = os.path.abspath(__file__ + 3 * '/..')
 sys.path.insert(0, parent_dir)
@@ -50,13 +51,30 @@ class Resolution():
         # Ensure eta and phi bounds are within the specified range
         eta_min = max(eta_min, 1.305)
         eta_max = min(eta_max, 3.045)
-        phi_min = max(phi_min, -3.141593)
-        phi_max = min(phi_max, 3.141593)
 
-        window_bins = baseline_df[
-            (baseline_df['eta_center'] >= eta_min) & (baseline_df['eta_center'] <= eta_max) &
-            (baseline_df['phi_center'] >= phi_min) & (baseline_df['phi_center'] <= phi_max)
-        ]
+        # Wrap-around for phi_min and phi_max
+        phi_min = (phi_min + np.pi) % (2 * np.pi) - np.pi
+        phi_max = (phi_max + np.pi) % (2 * np.pi) - np.pi
+
+        if phi_min > phi_max:
+            # Part 1: From phi_min to +pi (wrap around)
+            window_bins_part1 = baseline_df[
+                (baseline_df['eta_center'] >= eta_min) & (baseline_df['eta_center'] <= eta_max) &
+                (baseline_df['phi_center'] >= phi_min) & (baseline_df['phi_center'] <= np.pi)
+            ]
+            # Part 2: From -pi to phi_max (wrap around)
+            window_bins_part2 = baseline_df[
+                (baseline_df['eta_center'] >= eta_min) & (baseline_df['eta_center'] <= eta_max) &
+                (baseline_df['phi_center'] >= -np.pi) & (baseline_df['phi_center'] <= phi_max)
+            ]
+            window_bins = pd.concat([window_bins_part1, window_bins_part2], ignore_index=True)
+
+        else:
+
+            window_bins = baseline_df[
+                (baseline_df['eta_center'] >= eta_min) & (baseline_df['eta_center'] <= eta_max) &
+                (baseline_df['phi_center'] >= phi_min) & (baseline_df['phi_center'] <= phi_max)
+            ]
 
         # Create an empty list to store the energies for each 3x3 subwindow
         subwindow_energies = []
@@ -68,7 +86,6 @@ class Resolution():
         max_pt = -1
         best_subwindow = None
         best_subwindow_data = {}
-
         # Iterate over each possible 3x3 subwindow within the 12x12 window
         for i in range(window_size - subwindow_size + 2):
             for j in range(window_size - subwindow_size + 2):
@@ -79,13 +96,31 @@ class Resolution():
 
                 eta_start = max(eta_start, 1.305)
                 eta_end = min(eta_end, 3.045)
-                phi_start = max(phi_start, -3.141593)
-                phi_end = min(phi_end, 3.141593)
 
-                subwindow = window_bins[
-                    (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] <= eta_end) &
-                    (window_bins['phi_center'] >= phi_start) & (window_bins['phi_center'] <= phi_end)
-                ]
+                # Wrap-around logic for phi_start and phi_end
+                phi_start = (phi_start + np.pi) % (2 * np.pi) - np.pi
+                phi_end = (phi_end + np.pi) % (2 * np.pi) - np.pi
+
+                # Select subwindow, handling the wrap-around case
+                if phi_start > phi_end:
+                    # Wrap-around case: Split the selection into two parts
+                    subwindow_part1 = window_bins[
+                        (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] <= eta_end) &
+                        (window_bins['phi_center'] >= phi_start) & (window_bins['phi_center'] <= np.pi)
+                    ]
+                    subwindow_part2 = window_bins[
+                        (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] <= eta_end) &
+                        (window_bins['phi_center'] >= -np.pi) & (window_bins['phi_center'] <= phi_end)
+                    ]
+                    subwindow = pd.concat([subwindow_part1, subwindow_part2], ignore_index=True)
+
+                else:
+                    # Normal case
+                    subwindow = window_bins[
+                        (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] <= eta_end) &
+                        (window_bins['phi_center'] >= phi_start) & (window_bins['phi_center'] <= phi_end)
+                    ]
+
 
                 if len(subwindow) == subwindow_size * subwindow_size:
                     total_pt = subwindow['pt'].sum()
@@ -94,7 +129,7 @@ class Resolution():
                     particle_eta_1 = genpart_df['gen_eta'].iloc[0]
                     particle_phi_1 = genpart_df['gen_phi'].iloc[0]
 
-                    #plotMS.plot_window_with_subwindows(window_bins, eta_min, eta_max, phi_min, phi_max, eta_start, eta_end, phi_start, phi_end, particle_eta_1, particle_phi_1)
+                    #plotMS.plot_window_with_wraparound(window_bins_part1, window_bins_part2, eta_min,eta_max, phi_min, phi_max, particle_eta_1, particle_phi_1, eta_start, eta_end, phi_start, phi_end)
 
                     if total_pt > max_pt:
                         max_pt = total_pt
@@ -104,7 +139,6 @@ class Resolution():
                         'total_pt': max_pt
                     }
 
-        #print("subwindow data", best_subwindow_data)
         if best_subwindow_data:
             best_subwindow = best_subwindow_data['subwindow']
             best_subwindow_pt = best_subwindow_data['total_pt']
@@ -119,16 +153,22 @@ class Resolution():
                 # Otherwise, calculate weighted eta and phi positions
                 total_pt = best_subwindow['pt'].sum()
                 weighted_eta = (best_subwindow['pt'] * best_subwindow['eta_center']).sum() / total_pt
-                weighted_phi = (best_subwindow['pt'] * best_subwindow['phi_center']).sum() / total_pt
 
-            prova_phi = best_subwindow.iloc[4]['phi_center']
-            prova_eta = best_subwindow.iloc[4]['eta_center']
+                # Handle phi wrap-around using complex numbers
 
-            #print("prova eta e phi", prova_phi, prova_eta)
+                phi_values = best_subwindow['phi_center']
+                weights = best_subwindow['pt']
+                # Convert phi values to complex numbers: e^(i*phi)
+                complex_phi = np.exp(1j * phi_values)
+                # Calculate the weighted mean in the complex plane
+                weighted_complex_mean = (weights * complex_phi).sum() / weights.sum()
+                # Convert the weighted mean back to an angle
+                weighted_phi = np.angle(weighted_complex_mean)
 
-        # Calculate the difference with the actual eta of the generated particle
+        # Calculate the difference
         eta_diff = weighted_eta - particle_eta
-        phi_diff = weighted_phi - particle_phi
+        phi_diff_0 = weighted_phi - particle_phi
+        phi_diff = (phi_diff_0 + np.pi) % (2 * np.pi) - np.pi
 
         # Check for infinite or NaN values
         if not np.isfinite(eta_diff) or not np.isfinite(phi_diff):
@@ -137,43 +177,21 @@ class Resolution():
             eta_diff = 0.0
             phi_diff = 0.0  # or phi_diff = np.nan
 
-        # Save required data to files --> devo lavorare tutto in pt e non in pt altriemnti non riesco a confrontare con la gen part
+        # Save required data to files
         genpart_pt = genpart_df['gen_pt'].iloc[0]
-        #best_subwindow_pt = max_pt
         pt_ratio = best_subwindow_pt / genpart_pt if genpart_pt != 0 else np.nan
-        with open('genpart_pt.txt', 'a') as f1, open('best_subwindow_pt_overlap.txt', 'a') as f2, open('pt_ratio_overlap.txt', 'a') as f3:
+
+        # Check if the file is empty or doesn't exist
+        if not os.path.exists('pt_scale_&_res.txt') or os.stat('pt_scale_&_res.txt').st_size == 0:
+            with open('pt_scale_&_res.txt', 'a') as f4:
+                # Write the header
+                f4.write("best_subwindow_pt, genpart_pt, pt_ratio, eta_diff, phi_diff, particle_eta, particle_phi, weighted_eta,weighted_phi, event_number \n")
+
+        with open('genpart_pt.txt', 'a') as f1, open('best_subwindow_pt_overlap.txt', 'a') as f2, open('pt_ratio_overlap.txt', 'a') as f3, open('pt_scale_&_res.txt', 'a') as f4:
             f1.write(f"{genpart_pt}\n")
             f2.write(f"{best_subwindow_pt}\n")
             f3.write(f"{pt_ratio}\n")
-
-        if pt_ratio > 1.3:
-            print("event", event_number)
-            print("genpart_pt", genpart_pt)
-            print("best_subwindow_pt", best_subwindow_pt)
-            print("pt_ratio", pt_ratio)
-
-        events_gt_2_5 = []
-        events_gt_2_5_and_eta_diff_lt_minus_0_2 = []
-        # Save eta_diff and phi_diff to different files based on gen_eta condition
-        if particle_eta < 2:
-            with open('diffs_lt_2.txt', 'a') as f:
-                f.write(f"{eta_diff},{phi_diff}\n")
-        elif particle_eta > 2.5:
-            with open('diffs_gt_2_5.txt', 'a') as f:
-                f.write(f"{eta_diff},{phi_diff}\n")
-                events_gt_2_5.append(event_number)
-            if eta_diff < -0.2:
-                events_gt_2_5_and_eta_diff_lt_minus_0_2.append(event_number)
-                print(f"Event info: {event_number}, eta_diff: {eta_diff}, phi_diff: {phi_diff}")
-
-        #Save event numbers to files
-        with open('events_gt_2_5.txt', 'a') as f:
-            for event in events_gt_2_5:
-                f.write(f"{event}\n")
-
-        with open('events_gt_2_5_and_eta_diff_lt_minus_0_2.txt', 'a') as f:
-            for event in events_gt_2_5_and_eta_diff_lt_minus_0_2:
-                f.write(f"{event}\n")
+            f4.write(f"{best_subwindow_pt}, {genpart_pt}, {pt_ratio}, {eta_diff}, {phi_diff}, {particle_eta}, {particle_phi}, {weighted_eta}, {weighted_phi}, {event_number}\n")
 
         return subwindow_energies, eta_diff, phi_diff
     
@@ -184,7 +202,7 @@ class Resolution():
         print("unique_events", unique_events)
 
         for event in unique_events:
-            print("event", event)
+            #print("event", event)
             
             # Extract the DataFrame for the current event
             event_df = df[df['event'] == event]
