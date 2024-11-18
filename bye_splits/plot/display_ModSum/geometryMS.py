@@ -267,8 +267,7 @@ class Geometry():
         """
         Implementing the V16 geometry for the silicon part (hexagonal modules which include partials)
         """
-
-        with open('/eos/home-m/mmanoni/HGCAL_V16/V16_geojson_geometry/silicon_geometry_V16_eta_GT0.json', 'r') as file:
+        with open('/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/silicon_geometry_V16_eta_GT0.json', 'r') as file:
             geojson_data = file.read()
 
         geojson = json.loads(geojson_data)
@@ -405,11 +404,13 @@ class Geometry():
 
         print("GeoJSON with scintillator module geometries saved to:", output_file)
 
-    def create_scint_mod_geometry(self, df, save_geojson=True):
-        """
-        Function that creates the Modules Scintillator geometry based on what is done at the moment in CMSSW - We assume that the geometry is the same for V11 and V16 geometries.
 
-        If save_geojson = True the geometry is saved into a geojson file
+    def create_scint_mod_geometry(self, df, save_geojson=False):
+        """
+        Function that creates the Modules Scintillator geometry and outputs a DataFrame
+        with hex_x and hex_y coordinates representing the ordered vertices.
+
+        If save_geojson = True, the geometry is saved into a geojson file.
         """
         # Group DataFrame by ts_ieta, ts_iphi, and tc_layer
         grouped = df.groupby(['ts_ieta', 'ts_iphi', 'tc_layer'])
@@ -443,38 +444,38 @@ class Geometry():
             x_min, x_max = min(x_coords), max(x_coords)
             y_min, y_max = min(y_coords), max(y_coords)
 
-            # Find the corresponding y-coordinate or x-coordinate #FIXME
+            # Find the corresponding y-coordinate or x-coordinate
             Y_x_min = self.find_corresponding_y(x_min, all_coords)
             Y_x_max = self.find_corresponding_y(x_max, all_coords)
             X_y_min = self.find_corresponding_x(y_min, all_coords)
             X_y_max = self.find_corresponding_x(y_max, all_coords)
 
+            # Order the vertices in a clockwise manner
             ordered_vertices = self.order_vertices_clockwise([(x_min, Y_x_min), (x_max, Y_x_max), (X_y_max, y_max), (X_y_min, y_min)])
 
-            # Check for repeated vertices
-            #if len(set(map(tuple, ordered_vertices))) < len(ordered_vertices):
-                #print(f"Repeated vertices found in Layer {tc_layer}: {ordered_vertices}")
+            # Check for repeated vertices (if needed)
+            if len(set(map(tuple, ordered_vertices))) < len(ordered_vertices):
+                print(f"Repeated vertices found in Layer {tc_layer}: {ordered_vertices}")
 
-            # Append the result to the new DataFrame
-            #print("diamond_polygons", diamond_polygons)
-            #print("vertices_clockwise", ordered_vertices)
-            merged_geometries.append({'ts_ieta': ts_ieta, 'ts_iphi': ts_iphi, 'tc_layer': tc_layer,
-                                  'geometry': diamond_polygons, 'vertices_clockwise': ordered_vertices})
+            # Separate the ordered vertices into hex_x and hex_y
+            # The 'hex' naming is mantained to be consistent with silicon geometry in order to merge events from both sicintillator and silicon geom,
+            # even if here we are not conidering hexagons but quadrangles.
+            hex_x, hex_y = zip(*ordered_vertices)
 
+            # Append the result to the merged geometries list
+            merged_geometries.append({
+                'ts_ieta': ts_ieta,
+                'ts_iphi': ts_iphi,
+                'tc_layer': tc_layer,
+                'hex_x': list(hex_x),  # Store ordered x-coordinates
+                'hex_y': list(hex_y)   # Store ordered y-coordinates
+            })
+
+        # Create a DataFrame from the merged geometries
         merged_df = pd.DataFrame(merged_geometries)
 
+        # Optionally save the geojson
         if save_geojson:
             self.save_scint_mod_geo(merged_df, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/scint_modules_geo_FINAL.geojson')
 
         return merged_df
-    
-    #Reading geojson files
-
-    def read_geojson_files(self, bins_geojson_file, hexagons_geojson_file, scint_geojson_file):
-        with open(bins_geojson_file, 'r') as f:
-            bins_data = json.load(f)
-        with open(hexagons_geojson_file, 'r') as f:
-            hexagons_data = json.load(f)
-        with open(scint_geojson_file, 'r') as f:
-            scint_data = json.load(f)
-        return bins_data, hexagons_data, scint_data
