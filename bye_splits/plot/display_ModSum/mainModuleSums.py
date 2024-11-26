@@ -1,7 +1,6 @@
 # coding: utf-8
-#python3 mainModuleSums.py --event 5492 --algo baseline --particle photons --subdet CEE
-#python3 mainModuleSums.py --event 11162 --geom V16 --algo baseline --particle photons --subdet CEE
-#python3 mainModuleSums.py --event 6413 --geom V11 --algo baseline --particle photons --subdet CEE
+# python3 mainModuleSums.py --event -1 --geom V16 --algo baseline --particle pions --subdet 5
+
 _all_ = [ ]
 
 import os
@@ -10,16 +9,7 @@ import sys
 parent_dir = os.path.abspath(__file__ + 4 * '/..')
 sys.path.insert(0, parent_dir)
 
-import pandas as pd
 import argparse
-import matplotlib.pyplot as plt
-import numpy as np
-import plotly.graph_objects as go
-import plotly.express as px
-
-import cProfile
-
-import plotMS
 import algosMS
 import processingMS
 import resolutionMS
@@ -30,12 +20,12 @@ import geometryMS
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Interactive Grid Comparison")
 
-    parser.add_argument("--subdet", type=int, default=1, help="1:CEE (has only silicon layers), 2: CEH - only silicon part, 3: CEH - only scint part, 4:CEH, all layers")
+    parser.add_argument("--subdet", type=int, default=1, help="1: CEE (has only silicon layers), 2: CEH - only silicon part, 3: CEH - only scint part, 4: CEH, all layers, 5: CEE + CEH")
     parser.add_argument("--event", default='5492', help="Select event number or -1 for all events")
-    parser.add_argument("--n", type=int, default=None, help="Process the first n events")
-    parser.add_argument("--algo", default='8towers', help="Select algorithm (baseline, area_overlap, 8towers)")
+    parser.add_argument("--n", type=int, default=None, help="Process n events (random ordering)")
+    parser.add_argument("--algo", default='8towers', help="Select algorithm (baseline, area_overlap, 8towers, 16towers)")
     parser.add_argument("--particle", default='photons', help="Select particle type (photons or pions)")
-    parser.add_argument("--geom", default='V11', help="Select the CMSSW geometry (V11 or V16)")
+    parser.add_argument("--geom", default='V16', help="Select the CMSSW geometry (V11 or V16)")
     return parser.parse_args()
 
 
@@ -55,18 +45,28 @@ def main(subdet, event, particle, algo, n, geom):
         '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/'
         'DoublePhotonsPU0_hadd_123_energy/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5'
         )
-    if geom=='V16':
+    elif geom=='V16' and particle == 'photons':
         file_path = (
         '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/'
         'SinglePhotonPU0V16/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5'
         )
+    elif geom=='V16' and particle == 'pions':
+        file_path = (
+        '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/'
+        'SinglePionPU0V16/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5'
+        )
 
     # Method that retrieves events and process the data with the geometry
-    data, events_to_process = process.get_data_new(event,n,geom,subdet)
-    #print("DATA", data.columns) #qui mantengo ancora l'informazione sull'evento!
+    data, events_to_process = process.get_data_new(event,n,geom,subdet, particle)
+    print("DATA", data.columns)
+    print("Events_to_process",events_to_process )
 
     data_gen = process.get_genpart_data(file_path, event, events_to_process, n)
-    #print("Dataframe columns",data_gen['event'])
+
+    # Retain only one row per unique event in 'data_gen'
+    data_gen = data_gen.drop_duplicates(subset='event', keep='first')
+    print("Dataframe columns",data_gen['event'])
+    print("DATA GEN", data_gen)
 
     #helper.read_hdf5_structure(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/photons_manoni/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5')
     #helper.read_all_block0_values(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/photons_manoni/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5')

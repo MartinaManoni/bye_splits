@@ -21,12 +21,12 @@ from scipy.spatial.distance import cdist
 from scipy.stats import norm
 
 import matplotlib
+from matplotlib.patches import Circle
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon as PolygonPlt
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
-from shapely import geometry as geom
-from shapely.geometry import Polygon, mapping, shape, MultiPolygon
+from shapely.geometry import Polygon, shape
 from collections import defaultdict
 
 import numpy as np
@@ -357,7 +357,7 @@ def plot_baseline(df_baseline_proj, algo, event, particle):
     plt.savefig(f'{algo}_{particle}_{event}.png', dpi=500)  # Save the plot as an image
     plt.show()
 
-def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, subdet):
+def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, subdet, results_df):
     #this works only for a single event : need to put options to gen data to take only the n events that coprrespond to one from data
     print("plotting eta_phi_towers")
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -414,7 +414,33 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
             ax.text(row['gen_eta'], row['gen_phi'], '.', color='red', ha='center', va='center', fontsize=8)
     else:
         ax.text(data_gen['gen_eta'].values[0], data_gen['gen_phi'].values[0], '.', color='red', ha='center', va='center', fontsize=8)
+
+
+     # Plot jets as circles based on results_df
+    for _, jet_row in results_df.iterrows():
+        jet_eta = jet_row['jet_eta']
+        jet_phi = jet_row['jet_phi']
+        print("jet_eta", jet_eta)
+        print("jet_phi", jet_phi)
+        #jet_radius = 0.4  # This is the jet radius (Anti-kt algorithm radius)
+
+        # Create a circle for each jet
+        circle = Circle((jet_eta, jet_phi), 0.4 , color='red', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.4$')
+        ax.add_patch(circle)
         
+        # Create a circle for each jet
+        circle2 = Circle((jet_eta, jet_phi), 0.8 , color='blue', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.8$' )
+        ax.add_patch(circle2)
+
+        # Create a circle for each jet - FOR MATCHING
+        circle2 = Circle((jet_eta, jet_phi), 0.1 , color='green', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.1$' )
+        ax.add_patch(circle2)
+
+    # Avoid duplicate legend entries
+    handles, labels = ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=10)
+
     # Add color bar
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
     sm = ScalarMappable(norm=norm, cmap='viridis')
@@ -423,14 +449,18 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     cbar.set_label('Total pt')
 
     # Set labels and title
-    ax.set_xlabel('Eta')
-    ax.set_ylabel('Phi')
+    #ax.set_xlabel('Eta')
+    #ax.set_ylabel('Phi')
+    ax.set_xlabel(r'$\eta$', fontsize=14)
+    ax.set_ylabel(r'$\phi$', fontsize=14)
     ax.set_title(f'{algo}_{particle}_{event}')
 
     ax.autoscale()
     #plt.legend()
     plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_towers.png', dpi=500)  # Save the plot as an image
     plt.show()
+
+
 
 def plot_hex_bin_overlap_save(hdf5_filename, output_folder):
         with h5py.File(hdf5_filename, 'r') as hf:
@@ -879,6 +909,55 @@ def plot_towers_xy_grid(df_baseline_proj, data_gen, algo, event, particle, subde
     ax.autoscale()
     plt.savefig(f'{algo}_{particle}_{event}_{subdet}_xy_towers.png', dpi=700)  # Save the plot as an image
     plt.show()
+
+
+def plot_hex_bins(df_hexagon_info):
+        # Get the unique events from the index
+        unique_events = df_hexagon_info.index.get_level_values('event').unique()
+
+        # Select the first event (or specify another event if needed)
+        first_event_id = unique_events[0]
+        print(f"Plotting for event: {first_event_id}")
+
+        # Filter the DataFrame for the selected event
+        event_data = df_hexagon_info.xs(first_event_id, level='event')
+
+        # Iterate over layers in the selected event
+        for layer, layer_data in event_data.groupby('layer'):
+            plt.figure(figsize=(10, 10))
+            plt.title(f"Event {first_event_id}, Layer {layer}")
+            plt.xlabel("X Coordinates")
+            plt.ylabel("Y Coordinates")
+
+            # Iterate over hexagons in the layer and plot them
+            for _, hexagon in layer_data.iterrows():
+                hex_x = hexagon['hex_x']
+                #print("hex_x", hex_x)
+                hex_y = hexagon['hex_y']
+                #print("hex_y", hex_y)
+                polygon = Polygon(zip(hex_x, hex_y))
+                x, y = polygon.exterior.xy  # Get the exterior coordinates of the polygon
+
+                # Plot the hexagon
+                plt.fill(x, y, alpha=0.5, edgecolor='black')
+
+                # Plot overlapping bins, if any
+                for bin_info in hexagon['bins_overlapping']:
+                    bin_x = bin_info['x_vertices']
+                    bin_y = bin_info['y_vertices']
+                    plt.fill(bin_x, bin_y, alpha=0.3, color='red', edgecolor='black')
+
+                    # Calculate the centroid of the bin for placing the text annotation
+                    bin_polygon = Polygon(zip(bin_x, bin_y))
+                    centroid_x, centroid_y = bin_polygon.centroid.x, bin_polygon.centroid.y
+
+                    # Annotate the percentage overlap
+                    percentage_overlap = bin_info['percentage_overlap']
+                    plt.text(centroid_x, centroid_y, f"{percentage_overlap:.2f}%",
+                            fontsize=9, ha='center', va='center', color='blue')
+
+            plt.savefig(f"event_{first_event_id}_layer_{layer}_subdet1.png", format='png')
+            plt.close()  # Close the plot to free up memory and avoid displaying it
 
 def sph2cart(eta, phi, z=322.):
         ''' Useful conversion: Spherical coordinates to cartesian coordinates (x, y)  '''

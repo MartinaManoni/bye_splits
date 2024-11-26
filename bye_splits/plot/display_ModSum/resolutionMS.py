@@ -8,6 +8,7 @@ from data_handle.data_process import *
 import pandas as pd
 import numpy as np
 import plotMS
+import fastjet
 
 parent_dir = os.path.abspath(__file__ + 3 * '/..')
 sys.path.insert(0, parent_dir)
@@ -273,3 +274,156 @@ class Resolution():
             file.write("eta_diff,phi_diff\n")
             for eta_diff, phi_diff in zip(eta_diffs, phi_diffs):
                 file.write(f"{eta_diff},{phi_diff}\n")
+
+    def perform_clustering_antikt_matched(self, df, genpart_df):
+        """
+        This function clusters particle data using the Anti-kt algorithm and matches reconstructed jets to generated particles.
+
+        Key steps:
+        1. Construct pseudo-jets from particle data and perform clustering (radius 0.4).
+        2. Match reconstructed jets to generated particles within a DeltaR < 0.1.
+        3. Calculate jet resolutions (eta, phi, pT) and record unmatched particles.
+        4. Save results to a txt file.
+
+        Returns:
+        - A DataFrame of the matched jets.
+        - A list of reconstructed jets for each event.
+        """
+
+        print("df", df)
+        print("genpart_df", genpart_df)
+        all_results = []
+        all_jets = []
+
+        # Get unique events from the data
+        unique_events = df['event'].unique()
+        print("unique_events:", unique_events)
+
+        # Ensure the 'event' column in genpart_df is of integer type
+        genpart_df['event'] = genpart_df['event'].astype(int)
+
+        # Iterate over each unique event
+        for event in unique_events:
+            # Extract the DataFrame for the current event from both dataframes
+            event_df = df[df['event'] == event]
+            event_genpart_df = genpart_df[genpart_df['event'] == event]
+
+            # Prepare the PseudoJet list for this event
+            pseudojet_data = []
+            particle_info = []
+            for index, row in event_df.iterrows():
+                pt = row['pt']
+                if pt <= 0:
+                    continue  # Skip PseudoJet creation if pt is <= 0
+
+                # Compute eta_center and phi_center using the mean of vertices
+                eta_center = np.mean(row['eta_vertices'])
+                phi_center = np.mean(row['phi_vertices'])
+
+                # Convert (pt, eta, phi) to (px, py, pz, E)
+                px = pt * np.cos(phi_center)
+                py = pt * np.sin(phi_center)
+                pz = pt * np.sinh(eta_center)
+                energy = (px**2 + py**2 + pz**2)**0.5
+
+                # Create a PseudoJet and associate particle information
+                pseudojet = fastjet.PseudoJet(px, py, pz, energy)
+                pseudojet_data.append(pseudojet)
+                particle_info.append({'eta_vertices': row['eta_vertices'], 'phi_vertices': row['phi_vertices']})
+
+            # Perform clustering using the Anti-kt algorithm
+            jet_definition = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+            cluster_sequence = fastjet.ClusterSequence(pseudojet_data, jet_definition)
+            inclusive_jets = cluster_sequence.inclusive_jets()
+
+            # Store the jets for this event
+            all_jets.append(inclusive_jets)
+
+            # Evaluate the resolution between reconstructed jets and generated particles
+            for _, gen_row in event_genpart_df.iterrows():
+                gen_eta = gen_row['gen_eta']
+                gen_phi = gen_row['gen_phi']
+
+                # Find the closest jet within a radius of 0.1 in eta/phi
+                matched_jet = None
+                min_distance = 0.1
+                for jet in inclusive_jets:
+                    jet_eta = jet.eta()
+                    jet_phi = jet.phi()
+                    jet_phi = (jet_phi + np.pi) % (2 * np.pi) - np.pi
+
+                    # Compute the distance in eta/phi
+                    delta_eta = jet_eta - gen_eta
+                    delta_phi = (jet_phi - gen_phi + np.pi) % (2 * np.pi) - np.pi
+                    distance = np.sqrt(delta_eta**2 + delta_phi**2)
+
+                    if distance < min_distance:
+                        matched_jet = jet
+                        min_distance = distance
+
+                # Handle the case where no jet is found within the threshold
+                if matched_jet is None:
+                     all_results.append({
+                        'event': event,
+                        'gen_eta': gen_eta,
+                        'gen_phi': gen_phi,
+                        'gen_pt': gen_pt,
+                        'reco_eta': None,
+                        'reco_phi': None,
+                        'reco_pt': None,
+                        'eta_diff': None,
+                        'phi_diff': None,
+                        'pt_ratio': None,
+                        'matched': False  # Add a flag for unmatched particles
+                    })
+
+                # If a matching jet is found, compute resolutions and store results
+                if matched_jet is not None:
+                    jet_eta = matched_jet.eta()
+                    jet_phi = matched_jet.phi()
+                    jet_phi = (jet_phi + np.pi) % (2 * np.pi) - np.pi
+                    jet_pt = matched_jet.pt()
+                    jet_E = matched_jet.E()
+
+                    # Calculate pt_ratio (reconstructed jet pt / generated particle pt)
+                    gen_pt = gen_row['gen_pt']
+                    pt_ratio = jet_pt / gen_pt if gen_pt != 0 else None  # Avoid division by zero
+
+                    # Gather eta and phi vertices of the particles contributing to the jet
+                    constituents = matched_jet.constituents()
+                    constituent_eta_vertices = []
+                    constituent_phi_vertices = []
+
+                    #print("particle_info", particle_info)
+                    for constituent in constituents:
+                        idx = constituent.user_index()  # Retrieve original index
+                        constituent_eta_vertices.append(particle_info[idx]['eta_vertices'])
+                        constituent_phi_vertices.append(particle_info[idx]['phi_vertices'])
+
+                    # Compute the difference in eta and phi (resolution)
+                    eta_resolution = jet_eta - gen_eta
+                    phi_resolution_no_wrap = jet_phi - gen_phi
+                    phi_resolution = (phi_resolution_no_wrap + np.pi) % (2 * np.pi) - np.pi
+
+                    # Collect results in a dictionary
+                    all_results.append({
+                        'event': event,
+                        'gen_eta': gen_eta,
+                        'gen_phi': gen_phi,
+                        'gen_pt': gen_pt,
+                        'reco_eta': jet_eta,
+                        'reco_phi': jet_phi,
+                        'reco_pt': jet_pt,
+                        'eta_diff': eta_resolution,
+                        'phi_diff': phi_resolution,
+                        'pt_ratio': pt_ratio,
+                        'matched': True  # Add a flag for matched particles
+                    })
+
+        # Convert all results to a DataFrame for easier analysis
+        results_df = pd.DataFrame(all_results)
+        print("results_df", results_df)
+
+        # Save the results to a txt file
+        results_df.to_csv("jet_results_baseline.txt", sep=',', index=False)
+        return results_df, all_jets

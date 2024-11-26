@@ -58,19 +58,22 @@ class Processing():
     def random_event(self, f):
         return random.choice(self.list_events)
 
-    def filestore(self,geom=None):
+    def filestore(self,geom=None, particle=None):
         if geom =='V11':
             self.filename = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/DoublePhotonsPU0_hadd_123_energy/fill_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5"
-        elif geom =='V16':
+        elif geom =='V16' and particle == 'photons':
             self.filename = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/SinglePhotonPU0V16/fill_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5"
+        elif geom =='V16' and particle == 'pions':
+            print("Considering pions data")
+            self.filename = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/SinglePionPU0V16/fill_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5"
         else:
             self.filename = None  # Or raise an error if geom is required
             print("Unrecognized geom value. Please provide 'V11' or 'V16'.")
             #"/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/new_OKAY/fill_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5"
 
-    def get_data_new(self, event=None, n=None, geom=None, subdet=None):
+    def get_data_new(self, event=None, n=None, geom=None, subdet=None, particle=None):
         # Check if the HDF5 file exists
-        self.filestore(geom)
+        self.filestore(geom, particle)
         if not os.path.exists(self.filename):
             raise FileNotFoundError(f"HDF5 file '{self.filename}' not found.")
         # Read the list of events from the HDF5 file
@@ -88,7 +91,7 @@ class Processing():
         elif event == '-1':
             events_to_process = self.list_events
             if n is not None:
-                print("n", n)
+                print("Number of selected events (n)", n)
                 events_to_process = events_to_process[:n]
             #print(f"Processing events: {events_to_process}")
             processed_event_df = self.get_allevents(events_to_process, geom, subdet)
@@ -133,10 +136,18 @@ class Processing():
         all_ts_event_dfs = []
         all_tc_event_dfs = []
 
+        event_key_map = {}
+
         with h5py.File(self.filename, 'r') as file:
             for event in events_to_process:
                 for key in file.keys():
                     if event in key:
+
+                        # Track keys associated with the current event
+                        if event not in event_key_map:
+                            event_key_map[event] = []
+                        event_key_map[event].append(key)
+
                         if 'ts' in key:
                             dataset = file[key]
                             column_names = [str(col) for col in dataset.attrs['columns']]
@@ -151,8 +162,9 @@ class Processing():
                             df_tc = pd.DataFrame(dataset[:], columns=column_names)
                             df_tc['event'] = int(event)  # Add a new column for the event number
                             all_tc_event_dfs.append(df_tc)  # Append each tc event data frame to the list
-        
+
         combined_ts_df = pd.concat(all_ts_event_dfs, ignore_index=True)
+
         #combined_tc_df = pd.concat(all_tc_event_dfs, ignore_index=True)
         #print("tc data dataframe", combined_tc_df.columns)
         
@@ -167,7 +179,6 @@ class Processing():
         return processed_combined_ts_df
     
     def get_genpart_data(self, file_path, block0_value, events_to_process, n, group_name='df'):
-        print("events_to_process QUI", events_to_process)
         block1_data = []
         events = []
         print(block0_value)
@@ -205,7 +216,7 @@ class Processing():
                     # Create DataFrame and include event numbers as a column
                     df = pd.DataFrame(block1_data, columns=block1_items)
                     df['event'] = events
-                    print("GEN PART DF", df)
+                    #print("GEN PART DF", df)
                     return df
                 else:
                     print("Error: 'block0_values', 'block1_items', or 'block1_values' not found in group {}.".format(group_name))
@@ -268,11 +279,11 @@ class Processing():
         """
         Merging V16 data with geometry, separately for silicon and scintillator
         """
-        print("Processing V16 geometry ...")
+        print("**Processing V16 geometry ...")
         #x,y = self.sph2cart(data_gen['gen_eta'], data_gen['gen_phi'], z=322.)
 
         if subdet == 1 or subdet ==2:
-            print(f"Processing SUBDET {subdet}")
+            print(f"**Processing SUBDET {subdet}")
 
             #SILICON V16
             df_geo_si_V16 = self.geometry.create_si_mod_geometry_V16()
@@ -291,11 +302,11 @@ class Processing():
 
             #plotMS.plot_layer_hexagons(df_si_merged, 11, x,y)
             #print(f"df_subdet_{subdet} ts_subdet", df_si_merged_subdet["ts_subdet"])
-            print(f"df_subdet_{subdet}", df_si_merged_subdet.columns)
+            #print(f"df_subdet_{subdet}", df_si_merged_subdet.columns)
             return df_si_merged_subdet
 
         elif subdet == 3:
-            print(f"Processing subdet {subdet}: CEH --> only scintillator part")
+            print(f"**Processing subdet {subdet}: CEH --> only scintillator part")
 
             #SCINTILLATOR V16
             sci_update = {'triggercellieta' : 'tc_cu',
@@ -308,7 +319,7 @@ class Processing():
             df = self.geometry.implement_scint_modules_id(self.ds_geom['sci'])
             scint_mod_geom = self.geometry.create_scint_mod_geometry(df, save_geojson = False)
 
-            print("scint_mod_geom", scint_mod_geom)
+            #print("scint_mod_geom", scint_mod_geom)
             #print("scint_mod_geom_2", scint_mod_geom_2)
             #plotMS.plot_scint_tiles(self.ds_geom['sci'])
 
@@ -322,10 +333,10 @@ class Processing():
             # Merge dataframes
             scintillator_df = pd.merge(left=df_ts_filtered, right=scint_mod_geom, how='inner',
                                             on=['ts_layer', 'ts_wu', 'ts_wv'])
-            print("df_ts_filtered COL", df_ts_filtered.columns)
-            print("df_ts_filtered", df_ts_filtered)
-            print("scintillator_df COL", scintillator_df.columns)
-            print("scintillator_df ALL", scintillator_df)
+            #print("df_ts_filtered COL", df_ts_filtered.columns)
+            #print("df_ts_filtered", df_ts_filtered)
+            #print("scintillator_df COL", scintillator_df.columns)
+            #print("scintillator_df ALL", scintillator_df)
             #print("scintillator_df", scintillator_df['geometry'])
             #print("scintillator_df VERTEX", scintillator_df['vertices_clockwise'])
 
@@ -341,8 +352,25 @@ class Processing():
             # Combine the two DataFrames
             df_combined = pd.concat([df_subdet_2, df_subdet_3], ignore_index=True)
 
-            print("df_combined COL", df_combined.columns)
-            print("df_combined ALL", df_combined)
+            #print("df_combined COL", df_combined.columns)
+            #print("df_combined ALL", df_combined)
+
+            return df_combined
+
+        elif subdet == 5:
+
+            print("Processing combined subdet 1, 2 and 3 (CEE+ CEH)")
+
+            # Get the DataFrames for subdet 2 and 3
+            df_subdet_1 = self.process_event_V16(df_ts, subdet=1)
+            df_subdet_2 = self.process_event_V16(df_ts, subdet=2)
+            df_subdet_3 = self.process_event_V16(df_ts, subdet=3)
+
+            # Combine the two DataFrames
+            df_combined = pd.concat([df_subdet_1, df_subdet_2, df_subdet_3], ignore_index=True)
+
+            #print("df_combined COL", df_combined.columns)
+            #print("df_combined ALL", df_combined)
 
             return df_combined
 
@@ -757,15 +785,25 @@ class Processing():
         df , df_sum = self.apply_update_to_each_event(df_algo, bin_geojson_filename)
 
         #print("Eta/Phi resolution evaluation...")
-        df_resolution = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, window_size=8, subwindow_size=5)
-        self.resolution.save_eta_phi_differences(df_resolution, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_hadd_123_subw_5x5_OK.txt')
+        #print("df", df)
+        #print("df columns", df.columns)
+        #print("data_gen", data_gen)
+        #print("data_gen columns", data_gen.columns)
+
+        if particle == "pions":
+            results_df, jets = self.resolution.perform_clustering_antikt_matched(df, data_gen)
+            print(results_df)
+
+        elif particle == "photons":
+            df_resolution = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, window_size=8, subwindow_size=5)
+            self.resolution.save_eta_phi_differences(df_resolution, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_hadd_123_subw_5x5_OK.txt')
 
         #plotMS.plot_energy_ratio_histogram()
         #plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
         #print("data_gen", data_gen.columns)
         #print("df_sum", df_sum.columns)
         #print("event", event)
-        plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet)
+        #plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet, results_df)
         #plotMS.plot_towers_xy_grid(df_sum, data_gen, algo, event, particle, subdet)
 
     def compute_overlap(self, hex_polygon, hex_centroid, hex_properties, bins_layer):
