@@ -126,7 +126,6 @@ class EventData(BaseData):
         """
         if isinstance(events, int) and events==-1:
             events = self.ev_numbers
-            
         if len(events) != len(set(events)):
             mes = "You provided duplicate event numbers!"
             raise ValueError(mes)
