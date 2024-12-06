@@ -327,7 +327,6 @@ class Algorithms():
 
         # Calculate the execution time
         end_time = time.time()
-        print("Execution time loop - area overlap by event:", end_time - start_time)
 
         # Extract pt information for each bin and construct DataFrame
         flattened_bins = []

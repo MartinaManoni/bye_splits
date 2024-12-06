@@ -415,26 +415,26 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     else:
         ax.text(data_gen['gen_eta'].values[0], data_gen['gen_phi'].values[0], '.', color='red', ha='center', va='center', fontsize=8)
 
+    if particle == "pions":
+        # Plot jets as circles based on results_df
+        for _, jet_row in results_df.iterrows():
+            jet_eta = jet_row['reco_eta']
+            jet_phi = jet_row['reco_phi']
+            print("jet_eta", jet_eta)
+            print("jet_phi", jet_phi)
+            #jet_radius = 0.4  # This is the jet radius (Anti-kt algorithm radius)
 
-     # Plot jets as circles based on results_df
-    for _, jet_row in results_df.iterrows():
-        jet_eta = jet_row['jet_eta']
-        jet_phi = jet_row['jet_phi']
-        print("jet_eta", jet_eta)
-        print("jet_phi", jet_phi)
-        #jet_radius = 0.4  # This is the jet radius (Anti-kt algorithm radius)
+            # Create a circle for each jet
+            circle = Circle((jet_eta, jet_phi), 0.4 , color='red', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.4$')
+            ax.add_patch(circle)
+            
+            # Create a circle for each jet
+            circle2 = Circle((jet_eta, jet_phi), 0.8 , color='blue', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.8$' )
+            ax.add_patch(circle2)
 
-        # Create a circle for each jet
-        circle = Circle((jet_eta, jet_phi), 0.4 , color='red', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.4$')
-        ax.add_patch(circle)
-        
-        # Create a circle for each jet
-        circle2 = Circle((jet_eta, jet_phi), 0.8 , color='blue', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.8$' )
-        ax.add_patch(circle2)
-
-        # Create a circle for each jet - FOR MATCHING
-        circle2 = Circle((jet_eta, jet_phi), 0.1 , color='green', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.1$' )
-        ax.add_patch(circle2)
+            # Create a circle for each jet - FOR MATCHING
+            circle2 = Circle((jet_eta, jet_phi), 0.1 , color='green', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.1$' )
+            ax.add_patch(circle2)
 
     # Avoid duplicate legend entries
     handles, labels = ax.get_legend_handles_labels()
@@ -673,7 +673,7 @@ def plot_window_with_wraparound_only_window(window_bins_part1, window_bins_part2
 
     plt.show()
 
-def plot_window_with_wraparound(window_bins_part1, window_bins_part2, eta_min, eta_max, phi_min, phi_max, particle_eta, particle_phi, eta_start, eta_end, phi_start, phi_end):
+def plot_window_with_wraparound(window_bins, window_bins_part1, window_bins_part2,  eta_min, eta_max, phi_min, phi_max, particle_eta_1, particle_phi_1, eta_start, eta_end, phi_start, phi_end):
     """
     Plots the main window (12x12) and a moving subwindow (3x3) to visualize how the subwindows are iterated over.
 
@@ -690,15 +690,23 @@ def plot_window_with_wraparound(window_bins_part1, window_bins_part2, eta_min, e
     # Create the plot
     fig, ax = plt.subplots(figsize=(10, 10))
 
-    # Plot the main window bins (part 1)
-    for idx, row in window_bins_part1.iterrows():
-        polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='black', facecolor='none')
-        ax.add_patch(polygon)
-
-    # Plot the main window bins (part 2)
-    for idx, row in window_bins_part2.iterrows():
-        polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='black', facecolor='none')
-        ax.add_patch(polygon)
+    if window_bins is not None:
+        # Plot the main window bins (part 1)
+        for idx, row in window_bins.iterrows():
+            polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='black', facecolor='none')
+            ax.add_patch(polygon)
+    else:
+        if window_bins_part1 is not None:
+            # Plot the main window bins (part 1)
+            for idx, row in window_bins_part1.iterrows():
+                polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='black', facecolor='none')
+                ax.add_patch(polygon)
+                
+        if window_bins_part2 is not None:
+            # Plot the main window bins (part 2)
+            for idx, row in window_bins_part2.iterrows():
+                polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='black', facecolor='none')
+                ax.add_patch(polygon)
 
     # Highlight the subwindow in red
     if phi_start > phi_end:
@@ -720,16 +728,16 @@ def plot_window_with_wraparound(window_bins_part1, window_bins_part2, eta_min, e
             ax.add_patch(polygon)
     else:
         # Normal case for the subwindow
-        subwindow_bins = window_bins_part1[
-            (window_bins_part1['eta_center'] >= eta_start) & (window_bins_part1['eta_center'] <= eta_end) &
-            (window_bins_part1['phi_center'] >= phi_start) & (window_bins_part1['phi_center'] <= phi_end)
+        subwindow_bins = window_bins[
+            (window_bins['eta_center'] >= eta_start) & (window_bins['eta_center'] <= eta_end) &
+            (window_bins['phi_center'] >= phi_start) & (window_bins['phi_center'] <= phi_end)
         ]
         for idx, row in subwindow_bins.iterrows():
             polygon = plt.Polygon(np.column_stack((row['eta_vertices'], row['phi_vertices'])), edgecolor='red', facecolor='none')
             ax.add_patch(polygon)
 
     # Plot the particle position with a red cross
-    ax.scatter(particle_eta, particle_phi, color='red', marker='x', label='Particle Position')
+    ax.scatter(particle_eta_1, particle_phi_1, color='red', marker='x', label='Particle Position')
 
     # Set axis labels and title
     ax.set_xlabel('Eta')
@@ -745,7 +753,8 @@ def plot_window_with_wraparound(window_bins_part1, window_bins_part2, eta_min, e
     ax.legend()
 
     # Show the plot
-    plt.savefig("prova_window.png")
+    plt.close()
+    #plt.savefig("prova_window.png")
 
 
 def plot_eta_phi_resolution(results_df, algo, event, particle, subdet):
@@ -911,7 +920,7 @@ def plot_towers_xy_grid(df_baseline_proj, data_gen, algo, event, particle, subde
     plt.show()
 
 
-def plot_hex_bins(df_hexagon_info):
+def plot_hex_bins_0(df_hexagon_info):
         # Get the unique events from the index
         unique_events = df_hexagon_info.index.get_level_values('event').unique()
 
@@ -959,6 +968,67 @@ def plot_hex_bins(df_hexagon_info):
             plt.savefig(f"event_{first_event_id}_layer_{layer}_subdet1.png", format='png')
             plt.close()  # Close the plot to free up memory and avoid displaying it
 
+def plot_hex_bins(df_hexagon_info):
+    print("df_hexagon_info", df_hexagon_info.columns)
+    # Get the unique events from the index
+    unique_events = df_hexagon_info.index.get_level_values('event').unique()
+
+    # Select the first event (or specify another event if needed)
+    first_event_id = unique_events[0]
+    print(f"Plotting for event: {first_event_id}")
+
+    # Filter the DataFrame for the selected event
+    event_data = df_hexagon_info.xs(first_event_id, level='event')
+
+    # Iterate over layers in the selected event
+    for layer, layer_data in event_data.groupby('layer'):
+        plt.figure(figsize=(10, 10))
+        plt.title(f"Event {first_event_id}, Layer {layer}")
+        plt.xlabel("X Coordinates")
+        plt.ylabel("Y Coordinates")
+
+        # Iterate over hexagons in the layer and plot them
+        for _, hexagon in layer_data.iterrows():
+            hex_x = hexagon['hex_x']
+            hex_y = hexagon['hex_y']
+            polygon = Polygon(zip(hex_x, hex_y))
+            x, y = polygon.exterior.xy  # Get the exterior coordinates of the polygon
+
+            # Plot the hexagon
+            plt.fill(x, y, alpha=0.5, edgecolor='black')
+
+            # Calculate the centroid of the hexagon
+            centroid_x, centroid_y = polygon.centroid.x, polygon.centroid.y
+
+            # Convert centroid to (eta, phi) spherical coordinates
+            eta, phi = cart2sph(centroid_x, centroid_y, 350.)
+
+            # Annotate the centroid with eta and phi
+            plt.text(centroid_x, centroid_y, f"η={eta:.2f}, φ={phi:.2f}",
+                     fontsize=9, ha='center', va='center', color='black')
+
+            # Plot overlapping bins, if any
+            for bin_info in hexagon['bins_overlapping']:
+                bin_x = bin_info['x_vertices']
+                bin_y = bin_info['y_vertices']
+                plt.fill(bin_x, bin_y, alpha=0.3, color='red', edgecolor='black')
+
+                # Calculate the centroid of the bin for placing the text annotation
+                bin_polygon = Polygon(zip(bin_x, bin_y))
+                bin_centroid_x, bin_centroid_y = bin_polygon.centroid.x, bin_polygon.centroid.y
+                eta_bin, phi_bin= cart2sph(bin_centroid_x, bin_centroid_y, 350.)
+
+                # Annotate the percentage overlap
+                percentage_overlap = bin_info['percentage_overlap']
+                plt.text(bin_centroid_x, bin_centroid_y, f"{percentage_overlap:.2f}%",
+                         fontsize=9, ha='center', va='center', color='blue')
+                plt.text(bin_centroid_x, bin_centroid_y, f"η={eta_bin:.2f}, φ={phi_bin:.2f}",
+                         fontsize=9, ha='center', va='center', color='black')
+
+        plt.savefig(f"event_{first_event_id}_layer_{layer}_subdet1.png", format='png')
+        plt.close()  # Close the plot to free up memory and avoid displaying it
+
+
 def sph2cart(eta, phi, z=322.):
         ''' Useful conversion: Spherical coordinates to cartesian coordinates (x, y)  '''
         theta = 2*np.arctan(np.exp(-eta))
@@ -966,3 +1036,11 @@ def sph2cart(eta, phi, z=322.):
         x = r * np.sin(theta) * np.cos(phi)
         y = r * np.sin(theta) * np.sin(phi)
         return x, y
+
+def cart2sph(x, y, z=322.):
+        ''' Useful conversion: Cartesian coordinates to spherical coordinates (eta, phi) '''
+        r = np.sqrt(x**2 + y**2 + z**2)
+        theta = np.arccos(z / r)
+        eta = -np.log(np.tan(theta / 2))
+        phi = np.arctan2(y, x)
+        return eta, phi

@@ -18,10 +18,13 @@ class Resolution():
     def __init__(self):
         pass
 
-    def find_particle_bin_and_evaluate_windows(self, baseline_df, genpart_df, window_size=8, subwindow_size=5):
+    def find_particle_bin_and_evaluate_windows(self, baseline_df, genpart_df, algo, subdet, window_size=12, subwindow_size=9):
         particle_eta = genpart_df['gen_eta'].iloc[0]
         particle_phi = genpart_df['gen_phi'].iloc[0]
         event_number = genpart_df['event'].iloc[0]
+
+        window_bins_part1 = None
+        window_bins_part2 = None    
         #print( particle_eta,particle_phi, event_number)
         #print("gen part dataframe",  genpart_df)
         #print("baseline_df dataframe",  baseline_df)
@@ -56,6 +59,8 @@ class Resolution():
         # Wrap-around for phi_min and phi_max
         phi_min = (phi_min + np.pi) % (2 * np.pi) - np.pi
         phi_max = (phi_max + np.pi) % (2 * np.pi) - np.pi
+
+
 
         if phi_min > phi_max:
             # Part 1: From phi_min to +pi (wrap around)
@@ -130,8 +135,13 @@ class Resolution():
                     particle_eta_1 = genpart_df['gen_eta'].iloc[0]
                     particle_phi_1 = genpart_df['gen_phi'].iloc[0]
 
-                    #plotMS.plot_window_with_wraparound(window_bins_part1, window_bins_part2, eta_min,eta_max, phi_min, phi_max, particle_eta_1, particle_phi_1, eta_start, eta_end, phi_start, phi_end)
-
+                    # Inside the loop or function body
+                    #if window_bins_part1 is not None and window_bins_part2 is not None:
+                        #plotMS.plot_window_with_wraparound(window_bin=None, window_bins_part1=window_bins_part1, window_bins_part2=window_bins_part2, eta_min= eta_min,eta_max= eta_max, phi_min= phi_min, phi_max=phi_max, particle_eta_1=particle_eta_1, particle_phi_1=particle_phi_1, eta_start=eta_start, eta_end=eta_end, phi_start=phi_start, phi_end=phi_end)
+                    
+                    #elif window_bins is not None:
+                        #plotMS.plot_window_with_wraparound(window_bins= window_bins, window_bins_part1=None, window_bins_part2=None, eta_min= eta_min,eta_max= eta_max, phi_min= phi_min, phi_max=phi_max, particle_eta_1=particle_eta_1, particle_phi_1=particle_phi_1, eta_start=eta_start, eta_end=eta_end, phi_start=phi_start, phi_end=phi_end)
+                    
                     if total_pt > max_pt:
                         max_pt = total_pt
                         best_subwindow = subwindow
@@ -183,12 +193,12 @@ class Resolution():
         pt_ratio = best_subwindow_pt / genpart_pt if genpart_pt != 0 else np.nan
 
         # Check if the file is empty or doesn't exist
-        if not os.path.exists('pt_scale_&_res.txt') or os.stat('pt_scale_&_res.txt').st_size == 0:
-            with open('pt_scale_&_res.txt', 'a') as f4:
+        if not os.path.exists(f'pt_scale_&_res_{algo}_{subdet}.txt') or os.stat(f'pt_scale_&_res_{algo}_{subdet}.txt').st_size == 0:
+            with open(f'pt_scale_&_res_{algo}_{subdet}.txt', 'a') as f4:
                 # Write the header
                 f4.write("best_subwindow_pt, genpart_pt, pt_ratio, eta_diff, phi_diff, particle_eta, particle_phi, weighted_eta,weighted_phi, event_number \n")
 
-        with open('genpart_pt.txt', 'a') as f1, open('best_subwindow_pt_overlap.txt', 'a') as f2, open('pt_ratio_overlap.txt', 'a') as f3, open('pt_scale_&_res.txt', 'a') as f4:
+        with open(f'genpart_pt_{algo}_{subdet}.txt', 'a') as f1, open(f'best_subwindow_pt_overlap_{algo}_{subdet}.txt', 'a') as f2, open(f'pt_ratio_overlap_{algo}_{subdet}.txt', 'a') as f3, open(f'pt_scale_&_res_{algo}_{subdet}.txt', 'a') as f4:
             f1.write(f"{genpart_pt}\n")
             f2.write(f"{best_subwindow_pt}\n")
             f3.write(f"{pt_ratio}\n")
@@ -196,8 +206,11 @@ class Resolution():
 
         return subwindow_energies, eta_diff, phi_diff
     
-    def eval_eta_phi_photon_resolution(self, df, genpart_df, window_size=8, subwindow_size=5):
+    def eval_eta_phi_photon_resolution(self, df, genpart_df, algo, subdet, window_size=12, subwindow_size=9):
         all_results = []
+        print("eval_eta_phi_photon_resolution")
+        print("df", df)
+        print("genpart_df", genpart_df)
 
         unique_events = df['event'].unique()
         print("unique_events", unique_events)
@@ -218,7 +231,7 @@ class Resolution():
 
 
             # Apply the find_particle_bin_and_evaluate_windows function
-            subwindow_energies, eta_diff, phi_diff = self.find_particle_bin_and_evaluate_windows(event_df, event_genpart_df, window_size, subwindow_size)
+            subwindow_energies, eta_diff, phi_diff = self.find_particle_bin_and_evaluate_windows(event_df, event_genpart_df, algo, subdet, window_size, subwindow_size)
 
             # Store the results
             result = {
@@ -275,7 +288,7 @@ class Resolution():
             for eta_diff, phi_diff in zip(eta_diffs, phi_diffs):
                 file.write(f"{eta_diff},{phi_diff}\n")
 
-    def perform_clustering_antikt_matched(self, df, genpart_df):
+    def perform_clustering_antikt_matched(self, df, genpart_df, ouptput_txt):
         """
         This function clusters particle data using the Anti-kt algorithm and matches reconstructed jets to generated particles.
 
@@ -343,6 +356,7 @@ class Resolution():
             for _, gen_row in event_genpart_df.iterrows():
                 gen_eta = gen_row['gen_eta']
                 gen_phi = gen_row['gen_phi']
+                gen_pt = gen_row['gen_pt']
 
                 # Find the closest jet within a radius of 0.1 in eta/phi
                 matched_jet = None
@@ -351,6 +365,7 @@ class Resolution():
                     jet_eta = jet.eta()
                     jet_phi = jet.phi()
                     jet_phi = (jet_phi + np.pi) % (2 * np.pi) - np.pi
+                    jet_pt = jet.pt()
 
                     # Compute the distance in eta/phi
                     delta_eta = jet_eta - gen_eta
@@ -368,9 +383,9 @@ class Resolution():
                         'gen_eta': gen_eta,
                         'gen_phi': gen_phi,
                         'gen_pt': gen_pt,
-                        'reco_eta': None,
-                        'reco_phi': None,
-                        'reco_pt': None,
+                        'reco_eta': jet_eta,
+                        'reco_phi': jet_phi,
+                        'reco_pt': jet_pt,
                         'eta_diff': None,
                         'phi_diff': None,
                         'pt_ratio': None,
@@ -386,7 +401,6 @@ class Resolution():
                     jet_E = matched_jet.E()
 
                     # Calculate pt_ratio (reconstructed jet pt / generated particle pt)
-                    gen_pt = gen_row['gen_pt']
                     pt_ratio = jet_pt / gen_pt if gen_pt != 0 else None  # Avoid division by zero
 
                     # Gather eta and phi vertices of the particles contributing to the jet
@@ -425,5 +439,5 @@ class Resolution():
         print("results_df", results_df)
 
         # Save the results to a txt file
-        results_df.to_csv("jet_results_baseline.txt", sep=',', index=False)
+        results_df.to_csv(ouptput_txt, sep=',', index=False)
         return results_df, all_jets

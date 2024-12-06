@@ -17,6 +17,8 @@ import logging
 import time
 import multiprocessing
 from shapely.strtree import STRtree
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 
 log = logging.getLogger(__name__)
@@ -42,6 +44,8 @@ from matplotlib.patches import Polygon as matPoly
 from matplotlib.collections import PatchCollection
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import cpu_count
+import uproot
+import random
 
 class Processing():
     def __init__(self):
@@ -55,8 +59,131 @@ class Processing():
         self.resolution = resolutionMS.Resolution()
         self.geometry= geometryMS.Geometry()
 
+
+    def get_gen_particles(self, root_file_path, n=None, event=None):
+        print("Read root file and create DF for generated particles")
+
+        # Open the ROOT file and navigate to the TTree
+        with uproot.open(root_file_path) as file:
+            tree = file["l1tHGCalTriggerNtuplizer/HGCalTriggerNtuple"]
+
+            # Extract the necessary branches and rename them
+            branches = {
+                "good_genpart_exeta": "gen_eta",
+                "good_genpart_exphi": "gen_phi",
+                "good_genpart_energy": "gen_en",
+                "good_genpart_pt": "gen_pt",
+                "event": "event"
+            }
+
+            # Load branches into a dictionary of NumPy arrays
+            arrays = tree.arrays(list(branches.keys()), library="np")
+
+            # Flatten arrays and create a DataFrame
+            data = {new_name: np.concatenate(arrays[old_name]) for old_name, new_name in branches.items() if old_name != "event"}
+            data["event"] = np.repeat(arrays["event"], [len(arr) for arr in arrays["good_genpart_exeta"]])
+
+            df = pd.DataFrame(data)
+            baseline_selections = (df['gen_eta'] > 1.7) & (df['gen_eta'] < 2.8)
+            df = df[baseline_selections]
+
+            print("ciao", df)
+
+            # Get unique events
+            unique_events = df['event'].unique()
+
+            # Event selection logic
+            if event is None:
+                # Randomly choose one event if none is specified
+                selected_event = random.choice(unique_events)
+                print(f"Randomly selected event: {selected_event}")
+                selected_events = [selected_event]
+            elif event == '-1':
+                # Include all events if event == '-1'
+                selected_events = unique_events
+                if n is not None:
+                    # Limit to the first n events if specified
+                    selected_events = unique_events[:n]
+                    print(f"Selected first {n} events.")
+            else:
+                # Process specific event
+                event = int(event)  # Ensure the event ID is an integer
+                if event not in unique_events:
+                    raise ValueError(f"Event {event} not found in the ROOT file.")
+                print(f"Selected event: {event}")
+                selected_events = [event]
+
+            # Apply baseline selections (you can modify this selection as needed)
+            #baseline_selections = (df['gen_eta'] > 1.7) & (df['gen_eta'] < 2.8)
+            #filtered_df = df[baseline_selections]
+            #print("filtered_df", filtered_df)
+
+            print("selected_events qui", selected_events)
+            # Filter the DataFrame to only include the selected events
+            filtered_df = df[df['event'].isin(selected_events)]
+
+
+            filtered_df = filtered_df.reset_index(drop=True)
+            print("filtered_df 2", filtered_df)
+
+            # Return the filtered DataFrame and list of selected events
+            return filtered_df, selected_events
+
+    def read_root_and_create_dataframe(self, root_file_path, subdet, selected_events):
+            print("Read root file and create DF")
+            # Open the ROOT file and navigate to the TTree
+            with uproot.open(root_file_path) as file:
+                tree = file["l1tHGCalTriggerNtuplizer/HGCalTriggerNtuple"]
+
+                # Extract all branches with their new names
+                branches = {
+                    "good_ts_layer": "ts_layer",
+                    "good_ts_mipPt": "ts_mipPt",
+                    "good_ts_pt": "ts_pt",
+                    "good_ts_waferu": "ts_wu",
+                    "good_ts_waferv": "ts_wv",
+                    "good_ts_x": "ts_x",
+                    "good_ts_y": "ts_y",
+                    "good_ts_z": "ts_z",
+                    "good_ts_eta": "ts_eta",
+                    "good_ts_phi": "ts_phi",
+                    "good_ts_energy": "ts_energy",
+                    "good_ts_subdet": "ts_subdet",
+                    "event": "event"
+                }
+
+                # Load branches into a dictionary of NumPy arrays
+                arrays = tree.arrays(list(branches.keys()), library="np")
+
+                # Flatten arrays and create a DataFrame
+                data = {new_name: np.concatenate(arrays[old_name]) for old_name, new_name in branches.items() if old_name != "event"}
+                data["event"] = np.repeat(arrays["event"], [len(arr) for arr in arrays["good_ts_layer"]])
+
+                df = pd.DataFrame(data)
+
+                # Filter the DataFrame to only include the selected events
+                filtered_df = df[df['event'].isin(selected_events)]
+
+                # Apply baseline selections (you can modify this selection as needed)
+                baseline_selections = (filtered_df['ts_z'] > 0) & ((filtered_df['ts_mipPt'] > 0.5)) # Ensure positive z position
+                filtered_df = filtered_df[baseline_selections]
+
+                filtered_df = filtered_df.reset_index(drop=True)
+
+                # Process the event (assuming a similar processing function exists)
+                filtered_df = self.process_event_V16(filtered_df, subdet)
+
+                # Return the filtered DataFrame
+                return filtered_df
+
+
+    
+
     def random_event(self, f):
         return random.choice(self.list_events)
+    
+
+
 
     def filestore(self,geom=None, particle=None):
         if geom =='V11':
@@ -111,17 +238,20 @@ class Processing():
                 if event in key and 'ts' in key:
                     dataset = file[key]
                     column_names = [str(col) for col in dataset.attrs['columns']]
+                    print("column_names", column_names)
                     # Convert the dataset to a Pandas DataFrame with proper column names
                     df_ts = pd.DataFrame(dataset[:], columns=column_names)
                     df_ts['event'] = int(event)
-                    print("df_ts STOP", df_ts.columns)
-                    print("df_ts LAYERS", sorted(df_ts['ts_layer'].unique()) )
-                    filtered_df_sub3 = df_ts[df_ts['ts_subdet'] == 3]
-                    unique_layers_subdet_3 = sorted(filtered_df_sub3['ts_layer'].unique())
-                    print("Unique Layers for  == 3:", unique_layers_subdet_3)
+                    #print("df_ts STOP", df_ts.columns)
+                    #print("df_ts LAYERS", sorted(df_ts['ts_layer'].unique()) )
+                    #filtered_df_sub3 = df_ts[df_ts['ts_subdet'] == 3]
+                    #unique_layers_subdet_3 = sorted(filtered_df_sub3['ts_layer'].unique())
+                    #print("Unique Layers for  == 3:", unique_layers_subdet_3)
 
                     #print("df_ts ETA", df_ts['ts_eta'].unique())
                     #print("df_ts values", df_ts)
+                    print("DF_TS_TODAY", df_ts)
+                    print("DF_TS_TODAY", df_ts.columns)
                     if geom == 'V11':
                         silicon_df= self.process_event(df_ts, subdet)
                         print("silicon_df_proc V11", silicon_df.columns)
@@ -216,7 +346,7 @@ class Processing():
                     # Create DataFrame and include event numbers as a column
                     df = pd.DataFrame(block1_data, columns=block1_items)
                     df['event'] = events
-                    #print("GEN PART DF", df)
+                    print("GEN PART DF", df)
                     return df
                 else:
                     print("Error: 'block0_values', 'block1_items', or 'block1_values' not found in group {}.".format(group_name))
@@ -280,6 +410,7 @@ class Processing():
         Merging V16 data with geometry, separately for silicon and scintillator
         """
         print("**Processing V16 geometry ...")
+        print("df_ts QUII", df_ts.columns)
         #x,y = self.sph2cart(data_gen['gen_eta'], data_gen['gen_phi'], z=322.)
 
         if subdet == 1 or subdet ==2:
@@ -290,9 +421,14 @@ class Processing():
             #print("df_geo_si_V16", df_geo_si_V16)
 
             # Merge the DataFrames
+            print("df_ts ETA", df_ts["ts_eta"])
+            #print("df_geo_si_V16 ETA", df_geo_si_V16["ts_eta"])
+            print("df_ts PHI", df_ts["ts_phi"])
+            #print("df_geo_si_V16 PHI", df_geo_si_V16["ts_phi"])
             df_si_merged = pd.merge(left=df_ts, right=df_geo_si_V16, how='inner', on=['ts_layer', 'ts_wu', 'ts_wv'])
-            df_si_merged=df_si_merged[df_si_merged['ts_mipPt'] > 0.5]
+            #df_si_merged = df_si_merged[(df_si_merged['ts_mipPt'] > 0.5) & (df_si_merged['ts_z'] > 0)]
             df_si_merged_subdet = df_si_merged[df_si_merged['ts_subdet'] == subdet]
+            print("df_si_merged_subdet", df_si_merged_subdet)
 
             # Collect all unique ts_layers
             unique_ts_layers = sorted(df_si_merged_subdet['ts_layer'].unique())
@@ -302,7 +438,7 @@ class Processing():
 
             #plotMS.plot_layer_hexagons(df_si_merged, 11, x,y)
             #print(f"df_subdet_{subdet} ts_subdet", df_si_merged_subdet["ts_subdet"])
-            #print(f"df_subdet_{subdet}", df_si_merged_subdet.columns)
+            print(f"df_si_merged_subdet", df_si_merged_subdet.columns)
             return df_si_merged_subdet
 
         elif subdet == 3:
@@ -333,6 +469,7 @@ class Processing():
             # Merge dataframes
             scintillator_df = pd.merge(left=df_ts_filtered, right=scint_mod_geom, how='inner',
                                             on=['ts_layer', 'ts_wu', 'ts_wv'])
+            #scintillator_df = scintillator_df[(scintillator_df['ts_mipPt'] > 0.5) & (scintillator_df['ts_z'] > 0)]
             #print("df_ts_filtered COL", df_ts_filtered.columns)
             #print("df_ts_filtered", df_ts_filtered)
             #print("scintillator_df COL", scintillator_df.columns)
@@ -791,12 +928,12 @@ class Processing():
         #print("data_gen columns", data_gen.columns)
 
         if particle == "pions":
-            results_df, jets = self.resolution.perform_clustering_antikt_matched(df, data_gen)
+            results_df, jets = self.resolution.perform_clustering_antikt_matched(df, data_gen, f'{algo}_{particle}_{event}_{subdet}_PIONS_results.txt')
             print(results_df)
 
         elif particle == "photons":
-            df_resolution = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, window_size=8, subwindow_size=5)
-            self.resolution.save_eta_phi_differences(df_resolution, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_hadd_123_subw_5x5_OK.txt')
+            results_df = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, algo, subdet, window_size=12, subwindow_size=9)
+            self.resolution.save_eta_phi_differences(results_df, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_12w_9sub.txt')
 
         #plotMS.plot_energy_ratio_histogram()
         #plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
@@ -957,6 +1094,8 @@ class Processing():
 
         #print("max number of overlapping bins", max_overlapping_bins)
         df_hexagon_info = pd.DataFrame(hexagon_info)
+        print("before json")
+        print(df_hexagon_info.head())
         df_hexagon_info.set_index(['event', 'layer'], inplace=True)  # Now, 'event' and 'layer' are part of the index, not regular columns. This enables hierarchical organization
 
         return df_hexagon_info

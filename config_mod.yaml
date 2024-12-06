@@ -1,0 +1,283 @@
+io:
+  production:
+    photons:
+      dir: l1tHGCalTriggerNtuplizer
+      tree: HGCalTriggerNtuple
+      infile: /data_CMS/cms/manoni/L1HGCAL/ntuples_V11/hadd_DoublePhoton_FlatPt-1To100_PU0_123.root
+      #/eos/home-m/mmanoni/HGCAL_V16/V16_data_ntuples_15June2014/SinglePhotonPU0V16.root
+      #DoublePhoton_FlatPt-1To100_PU0_3k.root
+      #input to production/produce.py
+      #ntuple1_pions_1k_OKAY.root
+      #ntuple_doublePhotons_1k_OKAY.root
+      outfile: /data_CMS/cms/manoni/L1HGCAL/skimmed_ntuples_V11/skimmed_hadd_DoublePhoton_FlatPt-1To100_PU0_123.root
+    electrons:
+      dir: FloatingpointMixedbcstcrealsig4DummyHistomaxxydr015GenmatchGenclustersntuple
+      tree: HGCalTriggerNtuple
+      infile: /eos/user/b/bfontana/FPGAs/new_algos/electrons_hadd.root
+      outfile: /eos/user/b/bfontana/FPGAs/new_algos/skim_electrons_default.root
+    pions:
+      dir: l1tHGCalTriggerNtuplizer
+      tree:  HGCalTriggerNtuple
+      infile: /data_CMS/cms/manoni/L1HGCAL/ntuples/ntuple1_pions_1k_manoni.root
+      outfile: /data_CMS/cms/manoni/L1HGCAL/skimmed_ntuples/skimmed_singlePion_1k_manoni.root
+  PU0:
+    photons:
+      dir: l1tHGCalTriggerNtuplizer
+      tree: HGCalTriggerNtuple
+      file: /eos/home-m/mmanoni/HGCAL_V16/V16_data_ntuples_15June2024/SinglePhotonPU0V16.root
+      #/data_CMS/cms/manoni/L1HGCAL/skimmed_ntuples_V11/skimmed_hadd_DoublePhoton_FlatPt-1To100_PU0_123.root
+      #skimmed_DoublePhoton_FlatPt-1To100_PU0_3k.root
+      #skimmed_doublePhotons_1k_final.root #input to tasks/fillModSums.py
+      #/data_CMS/cms/manoni/L1HGCAL/skimmed_ntuples/skimmed_photons_1k_Tsums_v3.root  
+    electrons:
+      dir: FloatingpointMixedbcstcrealsig4DummyHistomaxxydr015GenmatchGenclustersntuple
+      tree: HGCalTriggerNtuple
+      file: /eos/user/i/iehle/data/PU0/photons/skim_photons_0PU_bc_stc_hadd.root #/data_CMS/cms/ehle/L1HGCAL/PU0/electrons/skims/skim_tightTC_dRxy_fullEta_electrons_0PU_bc_stc_hadd.root
+    pions:
+      dir: l1tHGCalTriggerNtuplizer
+      tree: HGCalTriggerNtuple
+      file: /home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/tasks/SinglePionPU0V16.root
+      #/eos/home-m/mmanoni/HGCAL_V16/V16_data_ntuples_15June2024/SinglePionPU0V16.root
+  PU200:
+    photons:
+      dir: FloatingpointMixedbcstcrealsig4DummyHistomaxxydr015GenmatchGenclustersntuple
+      tree: HGCalTriggerNtuple
+      file: /eos/user/m/mchiusi/visualization/display3d/skim_photons_hadd_200PU.root #/data_CMS/cms/ehle/L1HGCAL/PU200/photons/skims/skim_tightTC_dRxy_fullEta_photons_200PU_bc_stc_hadd.root
+    electrons:
+      dir: FloatingpointMixedbcstcrealsig4DummyHistomaxxydr015GenmatchGenclustersntuple
+      tree: HGCalTriggerNtuple
+      file: /data_CMS/cms/ehle/L1HGCAL/PU200/electrons/skims/skim_tightTC_dRxy_fullEta_electrons_200PU_bc_stc_hadd.root
+    pions:
+      dir: FloatingpointMixedbcstcrealsig4DummyHistomaxxydr015GenmatchGenclustersntuple
+      tree: HGCalTriggerNtuple
+      file: /data_CMS/cms/ehle/L1HGCAL/PU200/pions/skims/skim_tightTC_dRxy_fullEta_pions_200PU_bc_stc_hadd.root
+
+geometry:
+    dir: L1THGCaltriggergeomtester
+    tree: TreeTriggerCells
+    #TreeModules
+    #TreeTriggerCells
+    file: /data_CMS/cms/manoni/L1HGCAL/geometry_V11/geometry_marco/test_triggergeom_12_5_2_patch1_FIXED_v2.root
+    #/eos/user/m/mchiusi/visualization/display3d/test_triggergeom_12_5_2_patch1_FIXED_v2.root
+    #/data_CMS/cms/manoni/L1HGCAL/geo_ntuples_jb/test_triggergeom_V11.root
+    #/eos/user/m/mchiusi/visualization/display3d/test_triggergeom_12_5_2_patch1_FIXED_v2.root
+    waferSize: 16.64408
+    sensorSeparation: 0.1
+    nlayersCEE: 28
+    nlayersCEH: 22  
+
+selection:
+    particles: photons
+    disconnectedTriggerLayers: [2,4,6,8,10,12,14,16,18,20,22,24,26,28]
+    reachedEE: 2
+    deltarThreshold: 0.05
+    mipThreshold: 0.5
+
+defaultEvents:
+    PU0:
+      photons: [170032, 170044]
+      electrons: [92243, 92244]
+      pions: [9102, 9148]
+    PU200:
+      photons: [62878, 55896]
+
+varEvents:
+  gen:
+    event: 'event'
+    geta: 'good_genpart_exeta'
+    gphi: 'good_genpart_exphi'
+    gen: 'good_genpart_energy'
+    gpt: 'good_genpart_pt'
+  tc:
+    event: 'event'
+    wu: 'good_tc_waferu'
+    wv: 'good_tc_waferv'
+    l:  'good_tc_layer'
+    cv: 'good_tc_cellu'
+    cu: 'good_tc_cellv'
+    x: 'good_tc_x'
+    y: 'good_tc_y'
+    z: 'good_tc_z'
+    phi: 'good_tc_phi'
+    eta: 'good_tc_eta'
+    #idcl: 'good_tc_multicluster_id'
+    pt: 'good_tc_pt'
+    en: 'good_tc_mipPt'
+    en_gev: 'good_tc_energy'
+    sub: 'good_tc_subdet'
+  tsum:
+    event: 'event'
+    wu: 'good_ts_waferu'
+    wv: 'good_ts_waferv'
+    l:  'good_ts_layer'
+    x: 'good_ts_x'
+    y: 'good_ts_y'
+    z: 'good_ts_z'
+    phi: 'good_ts_phi'
+    eta: 'good_ts_eta'
+    pt: 'good_ts_pt'
+    en: 'good_ts_mipPt'
+    en_gev: 'good_ts_energy'
+    sub: 'good_ts_subdet'
+  cl:
+    event: 'event'
+    eta: 'good_cl3d_eta'
+    phi: 'good_cl3d_phi'
+    en: 'good_cl3d_energy'
+    pt: 'good_cl3d_pt'
+    id: 'good_cl3d_id'
+    # matches: 'matches'
+    # dR: 'deltaR'
+    
+varGeometry:
+    wu: 'waferu'
+    wv: 'waferv'
+    l: 'layer'
+    cu: 'triggercellu'
+    cv: 'triggercellv'
+    ieta: 'triggercellieta'
+    iphi: 'triggercelliphi'
+    x: 'x'
+    y: 'y'
+    z: 'z'
+    eta: 'eta'
+    phi: 'phi'
+    side: 'zside'
+    subd: 'subdet'
+    wvs: 'waferv_shift'
+    c: 'color'
+    orient: 'waferorient'
+    part: 'waferpart'
+
+3Ddisplay:
+  PU0:
+    photons: 'photons_0PU_cluster'
+    electrons: 'electrons_0PU_cluster'
+    pions: 'pions_0PU_cluster'
+  PU200:
+    photons: 'photons_200PU_cluster'
+    electrons: 'electrons_200PU_cluster'
+    pions: 'pions_200PU_cluster'
+  reprocess: False
+  coefs: [0.010, 0.015, 0.020, 0.025]
+
+clusterStudies:
+  localDir: /home/llr/cms/mchiusi/event_display/bye_splits/data/new_algos/
+  ehleDir: /eos/user/i/iehle/
+  dataFolder: data/
+  reinit: True #False
+  clusterSizeBaseName: cluster_size
+  coeffs: [0.0, 0.5, 50]
+  nevents: 100
+  pileUp: False
+  tree: FloatingpointMixedbcstcrealsig4DummyHistomaxxydr015GenmatchGenclustersntuple/HGCalTriggerNtuple
+  #coeffs: [0.0, 0.05, 50]
+  fileBaseName: energy_out
+  local: False
+
+base:
+  NbinsRz: 42
+  NbinsPhi: 216
+  NbinsPhiTs: 20
+  NbinsEta: 24
+  MinROverZ: 0.076
+  MaxROverZ: 0.58
+  MinPhi: -3.141593
+  MaxPhi: +3.141593
+  EtaMin: 1.7
+  EtaMax: 2.8
+  EtaMinStrict: 2.0
+  EtaMaxStrict: 2.6
+  EnResSplits: -0.35
+  EnResNoSplits: -0.2
+  FesAlgo: 'prova'
+
+fill:
+  FillOut: 'fill'
+  FillOutGenCl: 'fill_gencl'
+  FillOutTcAll: 'fill_all'
+  FillOutTs: 'fill_ts'
+
+smooth:
+  # copied from L1Trigger/L1THGCal/python/hgcalBackEndLayer2Producer_cfi.py
+  BinSums: [13, 11, 11, 11, 9, 9, 9, 7, 7, 7, 7, 7, 7, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+  SeedsNormByArea: False
+  AreaPerTriggerCell: 4.91E-05
+  SmoothIn: 'fill'
+  SmoothOut: 'smooth'
+
+seed:
+  SeedIn: 'smooth'
+  SeedOut: 'seed'
+  histoThreshold: 20.
+
+cluster:
+    ClusterInTC: 'fill'
+    ClusterInTCCS: 'csall'
+    ClusterInTCCSCylinder: 'cscylinder'
+    CSCylinder: False
+    ClusterInSeeds: 'seed'
+    ClusterInSeedsCS: 'seed_cs'
+    ClusterOutPlot: 'cluster_plot'
+    ClusterOutValidation: 'cluster_valid'
+    ClusterOutPlotCS: 'cluster_plot_cs'
+    ClusterOutValidationCS: 'cluster_valid_cs'
+    CoeffA: [
+    0.015, 0.015, 0.015, 0.015, 0.015, 0.015, 0.015,
+    0.020, 0.020, 0.020, 0.020, 0.020, 0.020, 0.020,
+    0.030, 0.030, 0.030, 0.030, 0.030, 0.030, 0.030,
+    0.040, 0.040, 0.040, 0.040, 0.040, 0.040, 0.040, #EM
+    0.040, 0.040, 0.040, 0.040, 0.040, 0.040,
+    0.050, 0.050, 0.050, 0.050, 0.050, 0.050, # FH
+    0.050, 0.050, 0.050, 0.050, 0.050, 0.050,
+    0.050, 0.050, 0.050, 0.050, 0.050, 0.050] # BH
+    CoeffB: 0
+    MidRadius: 2.3
+    PtC3dThreshold: 0.5
+  
+valid:
+  ClusterOutValidation: 'cluster_valid'
+  FillOutGenCl: 'fill_gencl'
+  FillOut: 'fill'
+  FillOutTcAll: 'fill_all'
+
+valid_cluster:
+  ClusterOutValidation: 'cluster_valid_cs'
+  CSclOut: 'cs3d'
+  CSgenOut: 'csgen'
+  CStcOut: 'csall'
+  CSregionOut: 'cscylinder'
+  tcDeltaRthresh: [] #[0.1, 0.5]
+
+valid_seed_cs:
+  CSclOut: 'cs3d'
+  CSgenOut: 'csgen'
+  CStcOut: 'cstc'
+  SeedOut: 'seed_cs'
+
+valid_seed_default:
+  SeedOut: 'seed'
+
+optimization:
+  Epochs: 99999
+  KernelSize: 10
+  WindowSize: 3
+  OptIn: 'triggergeom_condensed'
+  OptEnResOut: 'opt_enres'
+  OptPosResOut: 'opt_posres'
+  OptCSVOut: 'stats'
+  FillOutTcAll: 'fill_all'
+
+cs:
+  CSclOut: 'cs3d'
+  CSgenOut: 'csgen'
+  CStcOut: 'cstc'
+  CStcAllOut: 'csall'
+  NoCStcOut: 'nocs'
+  CScylinderOut: 'cscylinder'
+  
+seed_cs:
+  InputName: CStcOut #NoCStcOut default is to consider the CS
+  SeedOut: 'seed_cs'
+  histoThreshold: 20.
+  hexDist: True
