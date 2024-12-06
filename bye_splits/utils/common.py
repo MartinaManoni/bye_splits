@@ -9,7 +9,7 @@ parent_dir = os.path.abspath(__file__ + 2 * "/..")
 sys.path.insert(0, parent_dir)
 
 from utils import params
-from plotly.express.colors import sample_colorscale
+#from plotly.express.colors import sample_colorscale
 
 import os
 import yaml
