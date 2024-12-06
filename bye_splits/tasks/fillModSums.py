@@ -7,8 +7,6 @@ import sys
 parent_dir = os.path.abspath(__file__ + 3 * '/..')
 sys.path.insert(0, parent_dir)
 
-print("here ",sys.path )
-
 from bye_splits.utils import common
 from data_handle import data_process
 
@@ -22,6 +20,7 @@ from tqdm import tqdm
 def fill(pars, df_gen, df_cl, df_tc, df_ts, **kw):
     """
     Fills split clusters information according to the Stage2 FPGA fixed binning.
+    NB: At the moment this Filling step is skipped for Modules Sums treatment  -> root files are read directly
     """
 
     # Sets output paths for generated clusters and all trigger cells.
@@ -62,36 +61,24 @@ def fill(pars, df_gen, df_cl, df_tc, df_ts, **kw):
         # Check for NaN values in 'Rz' and 'phi' columns for tc
         nan_check_rz = df_tc['Rz_bin'].isna().any()
         nan_check_phi = df_tc['tc_phi_bin'].isna().any()
-        print("NaN check for 'Rz' column:", nan_check_rz)
-        print("NaN check for 'tc_phi' column:", nan_check_phi)
+        #print("NaN check for 'Rz' column:", nan_check_rz)
+        #print("NaN check for 'tc_phi' column:", nan_check_phi)
 
         # Check for NaN values in 'eta' and 'phi' columns for ts
         nan_check_etaTS = df_ts['ts_eta_bin'].isna().any()
         nan_check_phTS = df_ts['ts_phi_bin'].isna().any()
-        print("NaN check for 'ts_eta ' column:", nan_check_etaTS)
-        print("NaN check for 'ts_phi' column:", nan_check_phTS)
+        #print("NaN check for 'ts_eta ' column:", nan_check_etaTS)
+        #print("NaN check for 'ts_phi' column:", nan_check_phTS)
         # Print the rows with NaN values in specific columns
         nan_rows = df_ts[df_ts['ts_eta_bin'].isna()]
-        print("Rows with NaN values in 'Rz' or 'tc_phi' columns:")
-        print(nan_rows)
+        #print("Rows with NaN values in 'Rz' or 'tc_phi' columns:")
+        #print(nan_rows)
         
 
         nansel = (pd.isna(df_tc.Rz_bin)) & (pd.isna(df_tc.tc_phi_bin))
         nanselts = (pd.isna(df_ts.ts_phi_bin)) | (pd.isna(df_ts.ts_eta_bin))
         df_tc = df_tc[~nansel]
         df_ts = df_ts[~nanselts]
-      
-
-        #print(df_ts)
-        #print(df_tc)
-        
-        selected_event = 5187  # Replace with the desired event number
-
-        # Select rows with the specified event number
-        df_tc_event = df_tc[df_tc['event'] == selected_event]
-        df_ts_event = df_ts[df_ts['event'] == selected_event]
-        #print("tc EVENT ",df_tc_event)
-        #print("ts EVENT ",df_ts_event)
 
        # data_process.plot_2d(df_tc_event, 'tc_phi_bin' , 'Rz_bin', phiedges, rzedges,'Phi','Rz', '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/tasks/tc_plot_event_phi_Rz.png')
        # data_process.plot_2d(df_ts_event, 'ts_phi_bin' , 'ts_eta_bin', phiedges, etaedges,'Phi', 'Eta', '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/tasks/tsum_plot_event_phi_eta.png')
@@ -104,14 +91,6 @@ def fill(pars, df_gen, df_cl, df_tc, df_ts, **kw):
         store_all[kw['FesAlgo'] + '_3d'] = df_3d
         store_ts['ts']=df_ts
 
-        print("df_3d:")
-        #print(df_3d)
-    
-        print("\ndf_tc:")
-        #print(df_tc)
-    
-        print("\ndf_ts:")
-        #print(df_ts)
         """
         hexagon = [
         [1, 0, 3],
@@ -150,7 +129,7 @@ def fill(pars, df_gen, df_cl, df_tc, df_ts, **kw):
             
             keep_tc = ['tc_phi_bin', 'Rz_bin', 'tc_layer', 'tc_mipPt', 'tc_pt',
                        'tc_wu', 'tc_wv', 'tc_cu',  'tc_cv', 'tc_x', 'tc_y', 'tc_z',
-                       'tc_eta', 'tc_phi', 'gen_eta', 'gen_phi']
+                       'tc_eta', 'tc_phi', 'gen_eta', 'gen_phi', 'tc_subdet']
             ev_tc = ev_tc.filter(items=keep_tc)
             wght_f = lambda pos: ev_tc.tc_mipPt*pos/np.abs(ev_tc.tc_z)
             ev_tc['wght_x'] = wght_f(ev_tc.tc_x)
@@ -192,7 +171,7 @@ def fill(pars, df_gen, df_cl, df_tc, df_ts, **kw):
 
             cols_keep = ['Rz_bin', 'tc_phi_bin', 'tc_layer', 'tc_mipPt', 
                          'tc_pt', 'tc_wu', 'tc_wv', 'tc_cu',  'tc_cv',
-                         'tc_x',  'tc_y',  'tc_z',  'tc_eta', 'tc_phi'] 
+                         'tc_x',  'tc_y',  'tc_z',  'tc_eta', 'tc_phi', 'tc_subdet']
             ev_tc = ev_tc[cols_keep]
             if ev_tc.empty:
                 continue
@@ -205,7 +184,7 @@ def fill(pars, df_gen, df_cl, df_tc, df_ts, **kw):
             #NEW TS
             cols_keep = ['ts_phi_bin', 'ts_eta_bin', 'ts_layer', 'ts_mipPt', 
                          'ts_pt', 'ts_wu', 'ts_wv','ts_x',  'ts_y',  'ts_z',
-                         'ts_eta', 'ts_phi'] 
+                         'ts_eta', 'ts_phi', 'ts_energy', 'ts_subdet']
             ev_ts = ev_ts[cols_keep]
             if ev_ts.empty:
                 continue
@@ -220,7 +199,7 @@ def fill(pars, df_gen, df_cl, df_tc, df_ts, **kw):
             ev_tc_all = df_tc[df_tc.event == ev]
             ev_tc_all = ev_tc_all.reset_index().drop(['entry', 'subentry', 'event'], axis=1)
             all_keep = ['tc_layer', 'tc_mipPt', 'tc_pt', 'tc_energy',
-                        'tc_x', 'tc_y', 'tc_z', 'tc_eta', 'tc_phi']
+                        'tc_x', 'tc_y', 'tc_z', 'tc_eta', 'tc_phi','tc_subdet']
             all_tcs = ev_tc_all.filter(items=all_keep)
             if ev_tc_all.empty:
                 continue
@@ -246,6 +225,6 @@ if __name__ == "__main__":
     FLAGS = parser.parse_args()
     assert (FLAGS.sel in ('splits_only', 'no_splits', 'all') or
             FLAGS.sel.startswith('above_eta_'))
-    df_gen, df_cl, df_tc, df_ts = data_process.get_data_reco_chain_start_ModSums(nevents=100)
+    df_gen, df_cl, df_tc, df_ts = data_process.get_data_reco_chain_start_ModSums(nevents=-1, reprocess=True, tag='chain', particles='pions', pu=0, event=None)
     fill_d = params.read_task_params('fill')
     fill(vars(FLAGS), df_gen, df_cl, df_tc, df_ts, **fill_d)
