@@ -1,0 +1,103 @@
+-----------
+DAS Samples 
+-----------
+
+MC campaign: Phase2Fall22DRMiniAOD
+
+Pions PU 0 and PU200 
+https://cmsweb.cern.ch/das/request?view=list&limit=50&instance=prod%2Fglobal&input=dataset%3D%2FSinglePion_Pt-0To200-gun%2F*%2FGEN-SIM-DIGI-RAW-MINIAOD
+
+Single Photons PU0 
+https://cmsweb.cern.ch/das/request?input=dataset%3D%2FSinglePhoton_Pt-2To200-gun%2FPhase2Fall22DRMiniAOD-noPU_125X_mcRun4_realistic_v2-v1%2FGEN-SIM-DIGI-RAW-MINIAOD&instance=prod/global
+
+Double Photon PU 200
+https://cmsweb.cern.ch/das/request?input=dataset%3D%2FDoublePhoton_FlatPt-1To100-gun%2FPhase2Fall22DRMiniAOD-PU200_125X_mcRun4_realistic_v2-v1%2FGEN-SIM-DIGI-RAW-MINIAOD&instance=prod/global
+
+VBF Higgs to invisible (JETS) 
+*Phase2Fall22 - tehre is no PU0 samples 
+-PU200
+https://cmsweb.cern.ch/das/request?input=dataset%3D%2FVBF_HToInvisible_M-125_TuneCP5_14TeV-powheg-pythia8%2FPhase2Fall22DRMiniAOD-PU200_125X_mcRun4_realistic_v2-v1%2FGEN-SIM-DIGI-RAW-MINIAOD&instance=prod/global
+
+To try the matching - should not be on tape- dataset=/VBFHToTauTau_M-125_TuneCP5_14TeV-powheg-pythia8/Phase2Spring23DIGIRECOMiniAOD-noPU_131X_mcRun4_realistic_v5-v1/GEN-SIM-DIGI-RAW-MINIAOD
+
+*Phase2Spring23
+-no PU (on tAPE 100% CNAF)
+https://cmsweb.cern.ch/das/request?input=dataset%3D%2FVBFHToInvisible_M-125_TuneCP5_14TeV-powheg-pythia8%2FPhase2Spring23DIGIRECOMiniAOD-noPU_131X_mcRun4_realistic_v5-v1%2FGEN-SIM-DIGI-RAW-MINIAOD&instance=prod/global
+-PU200
+https://cmsweb.cern.ch/das/request?input=dataset%3D%2FVBFHToInvisible_M-125_TuneCP5_14TeV-powheg-pythia8%2FPhase2Spring23DIGIRECOMiniAOD-PU200_Trk1GeV_131X_mcRun4_realistic_v5-v1%2FGEN-SIM-DIGI-RAW-MINIAOD&instance=prod/global
+
+*Min Bias samples
+-PU200
+https://cmsweb.cern.ch/das/request?view=list&limit=50&instance=prod%2Fglobal&input=dataset%3D%2FMinBias_TuneCP5_14TeV-pythia8%2FPhase2Fall22DRMiniAOD-PU200_125X_mcRun4_realistic_v2-v1%2FGEN-SIM-DIGI-RAW-MINIAOD
+
+
+-----------
+Production 
+-----------
+LOCATION: /eos/user/m/mmanoni/HGCAL_CMSSW14/HgcalTPG_1400pre1/src/L1Trigger/L1THGCalUtilities/test    GIT BRANCH : ModSum_V16
+https://github.com/MartinaManoni/cmssw/blob/ModSum_V16/L1Trigger/L1THGCalUtilities/test/testHGCalL1T_RelValV16_cfg.py
+
+File for production of the V16 samples: testHGCalL1T_RelValV16_cfg.py
+For crab submission: crab_GammaGun_Pt1_100_PU0_HLTSummer20ReRECOMiniAOD_realbcstc4.py
+testHGCalL1T_RelValV16_cfg.py
+
+
+
+Files are stored under: 
+xrdfs root://eos.grif.fr ls /eos/grif/cms/llr/store/user/mmanoni/
+xrdfs root://eos.grif.fr stat /eos/grif/cms/llr/store/user/mmanoni/ : to know the dimension of the file 
+
+/eos/grif/cms/llr/store/user/mmanoni/DoublePhoton_FlatPt-1To100
+/eos/grif/cms/llr/store/user/mmanoni/DoublePhoton_FlatPt-1To100-gun
+/eos/grif/cms/llr/store/user/mmanoni/SinglePhoton_Pt-2To200-gun
+/eos/grif/cms/llr/store/user/mmanoni/SinglePion_Pt-0To200-gun
+
+******************
+Submission on CRAB
+******************
+
+VOMS INIT
+voms-proxy-init -voms cms (12 ore standard)
+voms-proxy-init --voms cms --valid 168:00 (valid for one week)
+voms-proxy-info --all
+
+CRAB SUBMISSION
+crab submit -c crab_GammaGun_Pt1_100_PU0_HLTSummer20ReRECOMiniAOD_realbcstc4.py
+
+CHECK CRAB JOBS
+crab status -d /path/to/your/crab/project/directory --verboseErrors
+
+KILLING CRAB JOBS
+crab kill -d crab_projects/crab_tutorial_Aug2021_MC_generation_kill
+
+LOCAL SUBMISSION 
+cmsRun testHGCalL1T_RelValV16_cfg.py
+
+KILL LOCAL JOBS
+ps aux | grep cmsRun
+kill -SIGTERM <PID>
+kill -SIGKILL <PID>
+
+
+
+-----------------------------------------
+Skimming of ntuples - submission on Tier 3 
+-----------------------------------------
+RUN:
+export X509_USER_PROXY=~/.t3/proxy.cert
+voms-proxy-init -voms cms
+python3 produce_OnTier3.py --inputFolder DoublePhoton_FlatPt-1To100-gun/DoublePhoton_FlatPt-1To100-gun_Phase2Fall22DRMiniAOD-PU200_125X_mcRun4_realistic_v2-v1/240613_095947/0000 --outputFolder DoublePhoton_FlatPt-1To100-gun --n_files 1 --particles photons --queue short
+(file to use is produce_mod_updated.py)
+
+
+to check files: gfal-ls root://eos.grif.fr//eos/grif/cms/llr/store/user/mmanoni/SinglePion_Pt-0To200-gun/SinglePion_Pt-0To200-gun_Phase2Fall22DRMiniAOD-noPU_125X_mcRun4_realistic_v2-v1/240614_135746/
+gfal for definition does not work in a CMSSW env!!
+
+
+------------------
+Filling (byeplit) | Now skipped
+------------------
+/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/tasks
+fillModSums.py
+
+
