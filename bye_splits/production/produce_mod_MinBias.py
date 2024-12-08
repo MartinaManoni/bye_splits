@@ -88,17 +88,6 @@ def skim(tn, inf, outf, particle, nevents, cfg):
 
     dataframe = ROOT.RDataFrame(tn, inf)
 
-    # gen-related variables
-    gen_intv = ["genpart_pid"]
-    gen_floatv = ["genpart_exphi", "genpart_exeta", "genpart_energy", "genpart_pt"]
-    gen_floatv2 = []
-    gen_v = gen_intv + gen_floatv + gen_floatv2
-
-
-    for v in gen_v:
-        print("gen_v", v)
-        df = df.Define("tmp_good_" + v, v)
-
     # trigger cells-related variables
     tc_uintv = ["tc_multicluster_id"]
     tc_intv = ["tc_layer", "tc_cellu", "tc_cellv", "tc_waferu", "tc_waferv", "tc_subdet"]
@@ -108,7 +97,7 @@ def skim(tn, inf, outf, particle, nevents, cfg):
 
     # selection on trigger cells (within each event)
     condtc = "tc_mipPt > " + str(mipThreshold)
-    dd1 = df.Define("tmp_good_tcs", condtc)
+    dd1 = dataframe.Define("tmp_good_tcs", condtc)
     for v in tc_v:
         dd1 = dd1.Define("tmp_good_" + v, v + "[tmp_good_tcs]")
     
@@ -135,17 +124,10 @@ def skim(tn, inf, outf, particle, nevents, cfg):
         dd1 = dd1.Define("tmp_good_" + v, v + "[tmp_good_cl]")
 
     # remove events with zero clusters
-    dfilt2 = dd1.Filter("tmp_good_cl3d_id.size()!=0")
-
-    # matching
-    matchvars = ["deltaR", "matches"]
-    cond_deltaR = matchvars[0] + " <= " + str(deltarThreshold)
-    dd2 = (dfilt2.Define(matchvars[0],
-                         "calcDeltaR(tmp_good_genpart_exeta, tmp_good_genpart_exphi, tmp_good_cl3d_eta, tmp_good_cl3d_phi)")
-           .Define(matchvars[1], cond_deltaR))
+    dd2 = dd1.Filter("tmp_good_cl3d_id.size()!=0")
 
     # convert root vector types to vector equivalents (uproot friendly)
-    intv = gen_intv + tc_intv + ts_intv
+    intv = tc_intv + ts_intv
     for var in intv:
         dd2 = dd2.Define("good_" + var, "convertInt(tmp_good_" + var + ")")
 
@@ -153,17 +135,13 @@ def skim(tn, inf, outf, particle, nevents, cfg):
     for var in uintv:
         dd2 = dd2.Define("good_" + var, "convertUint(tmp_good_" + var + ")")
 
-    floatv = gen_floatv + tc_floatv + cl_floatv + ts_floatv
+    floatv = tc_floatv + cl_floatv + ts_floatv
     for var in floatv:
         dd2 = dd2.Define("good_" + var, "convertFloat(tmp_good_" + var + ")")
 
-    # floatv2 = gen_floatv2
-    # for var in floatv2:
-    #     dd2 = dd2.Define("good_" + var, "convertFloat2D(tmp_good_" + var + ")")
-
     # define stored variables (and rename some)
-    allvars = gen_v + tc_v + cl_v + ts_v
-    good_allvars = ["event"] + matchvars
+    allvars = tc_v + cl_v + ts_v
+    good_allvars = ["event"]
     for v in allvars:
         print("all vars", v)
         good_allvars.append("good_" + v)
@@ -178,6 +156,7 @@ def skim(tn, inf, outf, particle, nevents, cfg):
         dd2.Snapshot(tn, outf, good_allvars)
 
     print('OutputFolder:', outf)
+    #dd2.Count().OnPartialResult(10, "[&log](auto c) { l << c << \" events processed\n\";}")
 
     # display event processing progress
     count = ROOT.addProgressBar(ROOT.RDF.AsRNode(dd2))
