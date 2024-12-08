@@ -17,8 +17,6 @@ import logging
 import time
 import multiprocessing
 from shapely.strtree import STRtree
-import pyarrow as pa
-import pyarrow.parquet as pq
 
 
 log = logging.getLogger(__name__)
@@ -160,21 +158,27 @@ class Processing():
                 data["event"] = np.repeat(arrays["event"], [len(arr) for arr in arrays["good_ts_layer"]])
 
                 df = pd.DataFrame(data)
+                print("events", df["event"])
 
-                # Filter the DataFrame to only include the selected events
-                filtered_df = df[df['event'].isin(selected_events)]
+                # Check if events should be filtered
+                if selected_events is not None:
+                    # If events are specified, filter the DataFrame to only include those events
+                    df = df[df['event'].isin(selected_events)]
+                else:
+                    df = df[df['event']==493403]
+                    print("EVENTS NEUTRINOS", df['event'])
 
                 # Apply baseline selections (you can modify this selection as needed)
-                baseline_selections = (filtered_df['ts_z'] > 0) & ((filtered_df['ts_mipPt'] > 0.5)) # Ensure positive z position
-                filtered_df = filtered_df[baseline_selections]
+                baseline_selections = (df['ts_z'] > 0) & ((df['ts_mipPt'] > 0.5)) # Ensure positive z position
+                df = df[baseline_selections]
 
-                filtered_df = filtered_df.reset_index(drop=True)
+                df = df.reset_index(drop=True)
 
                 # Process the event (assuming a similar processing function exists)
-                filtered_df = self.process_event_V16(filtered_df, subdet)
+                df = self.process_event_V16(df, subdet)
 
                 # Return the filtered DataFrame
-                return filtered_df
+                return df
 
 
     
@@ -935,6 +939,13 @@ class Processing():
             results_df = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, algo, subdet, window_size=12, subwindow_size=9)
             self.resolution.save_eta_phi_differences(results_df, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_12w_9sub.txt')
 
+        elif particle == "neutrinos":
+            print("Sei arrivato!---antikt for neutrinos")
+            results_df, jet_counts = self.resolution.perform_clustering_antikt(df,f'{algo}_{particle}_{event}_{subdet}_results.txt' )
+            print("RESULTS NEUTRINO",results_df)
+            print("COUNTS",jet_counts)
+
+
         #plotMS.plot_energy_ratio_histogram()
         #plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
         #print("data_gen", data_gen.columns)
@@ -959,7 +970,7 @@ class Processing():
             for bin_feature in bins_layer
         ]
         bin_distances.sort(key=lambda x: x[1])  # Sort by distance
-        closest_bins = [bin_dist[0] for bin_dist in bin_distances[:35]] #takes total of 1.8 sec per event 
+        closest_bins = [bin_dist[0] for bin_dist in bin_distances[:35]] #takes total of 1.8 sec per event #35
         
         hex_info = []
         for bin_feature in closest_bins:

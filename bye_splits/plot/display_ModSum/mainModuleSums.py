@@ -15,6 +15,8 @@ import resolutionMS
 import helperMS
 import geometryMS
 import json
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*subnormal.*")
 
 
 def parse_arguments():
@@ -24,7 +26,7 @@ def parse_arguments():
     parser.add_argument("--event", default='5492', help="Select event number or -1 for all events")
     parser.add_argument("--n", type=int, default=None, help="Process n events (random ordering)")
     parser.add_argument("--algo", default='8towers', help="Select algorithm (baseline, area_overlap, 8towers, 16towers)")
-    parser.add_argument("--particle", default='photons', help="Select particle type (photons or pions)")
+    parser.add_argument("--particle", default='photons', help="Select particle type (photons, pions or neutrinos)")
     parser.add_argument("--geom", default='V16', help="Select the CMSSW geometry (V11 or V16)")
     return parser.parse_args()
 
@@ -60,12 +62,30 @@ def main(subdet, event, particle, algo, n, geom):
         )
         root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples/SinglePionPU0V16.root')
 
+    elif geom=='V16' and particle == 'neutrinos':
+        root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/MinBias_TuneCP5_14TeV-pythia8_Phase2Fall22DRMiniAOD-PU200_125X_mcRun4_realistic_v2-v1/skimmed_ntuples/Ntuple_1.root')
 
-    df_gen, events = process.get_gen_particles(root_file, n, event)
-    print("df_gen", df_gen)
-    print("events", events)
 
-    df_specific = process.read_root_and_create_dataframe(root_file, subdet, events)
+    # Skip get_gen_particles for neutrinos
+    if particle == 'neutrinos':
+        print("Skipping get_gen_particles for neutrinos")
+        df_gen, events = None, None  # Set these to None since gen variables are unavailable
+    else:
+        df_gen, events = process.get_gen_particles(root_file, n, event)
+        print("df_gen", df_gen)
+        print("events", events)
+
+    # Create the specific data frame for the particle
+    if events is None or len(events) == 0:
+        selected_events = None
+    else:
+        selected_events = events
+
+    df_specific = process.read_root_and_create_dataframe(
+    root_file, subdet, selected_events= selected_events)
+
+
+    #df_specific = process.read_root_and_create_dataframe(root_file, subdet, events)
     #print("df_specific", df_specific)
     #print("df_specific", df_specific.columns)
 

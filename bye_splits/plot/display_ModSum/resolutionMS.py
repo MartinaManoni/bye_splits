@@ -441,3 +441,65 @@ class Resolution():
         # Save the results to a txt file
         results_df.to_csv(ouptput_txt, sep=',', index=False)
         return results_df, all_jets
+
+    def perform_clustering_antikt(self, df, output_txt):
+        print("Input DataFrame:", df)
+        all_results = []
+
+        # Get unique events from the data
+        unique_events = df['event'].unique()
+        print("Unique events:", unique_events)
+
+        # Iterate over each unique event
+        for event in unique_events:
+            # Extract the DataFrame for the current event
+            event_df = df[df['event'] == event]
+
+            # Prepare the PseudoJet list for this event
+            pseudojet_data = []
+            for index, row in event_df.iterrows():
+                pt = row['pt']
+                if pt <= 0:
+                    continue  # Skip PseudoJet creation if pt is <= 0
+
+                # Compute eta_center and phi_center using the mean of vertices
+                eta_center = np.mean(row['eta_vertices'])
+                phi_center = np.mean(row['phi_vertices'])
+
+                # Convert (pt, eta, phi) to (px, py, pz, E)
+                px = pt * np.cos(phi_center)
+                py = pt * np.sin(phi_center)
+                pz = pt * np.sinh(eta_center)
+                energy = (px**2 + py**2 + pz**2)**0.5
+
+                # Create a PseudoJet
+                pseudojet = fastjet.PseudoJet(px, py, pz, energy)
+                pseudojet_data.append(pseudojet)
+
+            # Perform clustering using the Anti-kt algorithm
+            jet_definition = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+            cluster_sequence = fastjet.ClusterSequence(pseudojet_data, jet_definition)
+            inclusive_jets = cluster_sequence.inclusive_jets()
+
+
+            # Store the jets for this event
+            for jet in inclusive_jets:
+                all_results.append({
+                    'event': event,
+                    'reco_eta': jet.eta(),
+                    'reco_phi':  (jet.phi() + np.pi) % (2 * np.pi) - np.pi,
+                    'reco_pt': jet.pt(),
+                })
+
+        # Convert all results to a DataFrame for easier analysis
+        results_df = pd.DataFrame(all_results)
+        print("Results DataFrame:", results_df)
+
+        # Save the results to a txt file
+        results_df.to_csv(output_txt, sep=',', index=False)
+
+        # Count and print the number of jets reconstructed per event
+        jet_counts = results_df.groupby('event').size()
+        print("Jet counts per event:", jet_counts)
+
+        return results_df, jet_counts
