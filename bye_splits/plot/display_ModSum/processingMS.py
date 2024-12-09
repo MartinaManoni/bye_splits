@@ -900,7 +900,10 @@ class Processing():
 
         #hexagon_info_df = self.eval_hex_bin_overlap_scint(data, bin_geojson_filename, geom)
 
-        hexagon_info_df = self.eval_hex_bin_overlap_OK(data, bin_geojson_filename, geom)
+        #hexagon_info_df = self.eval_hex_bin_overlap_OK(data, bin_geojson_filename, geom)
+        filename_precomputed_silicon = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/hex_bin_precomputed_overlaps.json"
+        filename_precomputed_scint = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/tiles_bin_precomputed_overlaps.json"
+        hexagon_info_df= self.eval_hex_bin_overlap_with_precomputed_jsons(data,filename_precomputed_silicon, filename_precomputed_scint ,geom)
         #print("eval overlap dataframe", hexagon_info_df.columns)
         print(hexagon_info_df.index.get_level_values('event').unique())
 
@@ -1005,108 +1008,79 @@ class Processing():
             'bins_overlapping': hex_info
         }
 
-    def eval_hex_bin_overlap_OK(self, data, df_bin, geom):
-        print("Evaluating overlap between hexagons and towers bins layer by layer")
-        #print(data.columns)
-        #print(df_bin)
+    def eval_hex_bin_overlap_with_precomputed_jsons(self, data, precomputed_json_file, scintillator_json_file, geom):
+        """
+        Evaluate overlaps between hexagons and bins using precomputed JSON data.
 
-        with open(df_bin) as f:
-            bin_geojson = json.load(f)
+        :param data: DataFrame containing hexagon information.
+        :param silicon_json_file: Path to the JSON file with precomputed overlaps for subdet 1 and 2.
+        :param scintillator_json_file: Path to the JSON file with precomputed overlaps for subdet 3.
+        :return: A DataFrame with hexagon and bin overlap information.
+        """
+        print("Loading precomputed overlap data...")
 
-        bin_features = bin_geojson['features']
-        layer_names = set(bin_feature['properties']['Layer'] for bin_feature in bin_features)
-        event_groups = data.groupby('event')
+        # Load the two precomputed JSON files
+        with open(precomputed_json_file) as f:
+            precomputed_data = json.load(f)
 
-        # Precompute bin geometries
-        bins_by_layer = {
-            layer_name: [
-                {
-                    'geometry': Polygon(bin_feature['geometry']['coordinates'][0]),
-                    'properties': bin_feature['properties']
-                } for bin_feature in bin_features if bin_feature['properties']['Layer'] == layer_name
-            ] for layer_name in layer_names
+        with open(scintillator_json_file) as f:
+            scintillator_data = json.load(f)
+
+        # Index both precomputed data files
+        print("Indexing precomputed data...")
+        precomputed_index = {
+            (entry['hex_layer'], entry['hex_wu'], entry['hex_wv']): entry
+            for entry in precomputed_data
         }
 
-        hex_geometries = {
-            (event, layer_name): [
-                {
-                    'hex_properties': {
-                        'hex_x': hex_row.hex_x,
-                        'hex_y': hex_row.hex_y,
-                        'ts_z': round(hex_row.ts_z, 2),
-                        'ts_pt': hex_row.ts_pt
-                    },
-                    'hex_polygon': Polygon(zip(hex_row.hex_x, hex_row.hex_y)),
-                    'hex_centroid': Polygon(zip(hex_row.hex_x, hex_row.hex_y)).centroid
-                } for hex_row in event_data[event_data['ts_layer'] == layer_name].itertuples()
-            ] for event, event_data in event_groups for layer_name in layer_names
+        scintillator_index = {
+            (entry['hex_layer'], entry['hex_wu'], entry['hex_wv']): entry
+            for entry in scintillator_data
         }
 
-        hierarchical_data = []
-
-        start_time = time.time()
-        for event, event_data in event_groups:
-            event_info = {'event': event, 'layers': []}
-            
-            for layer_name in layer_names:
-                layer_data = {'layer': layer_name, 'hexagons': []}
-                bins_layer = bins_by_layer[layer_name]
-                hex_info = [
-                    self.compute_overlap(hex_geometry['hex_polygon'], hex_geometry['hex_centroid'], hex_geometry['hex_properties'], bins_layer)
-                    for hex_geometry in hex_geometries[(event, layer_name)]
-                ]
-                
-                layer_data['hexagons'] = hex_info
-                event_info['layers'].append(layer_data)
-            
-            hierarchical_data.append(event_info)
-
-        end_time = time.time()
-        print("LOOP OVERLAP", end_time - start_time)
-
+        print("Processing hexagon data...")
         hexagon_info = []
-        max_overlapping_bins = 0
-        for event_data in hierarchical_data:
-            event = event_data['event']
-            for layer in event_data['layers']:
-                layer_idx = int(layer['layer'])  # Ensure the layer index is an integer
-                for hexagon in layer['hexagons']:
-                    hex_info = {
-                        'event': event,
-                        'layer': layer_idx,
-                        'hex_x': hexagon['hex_x'],
-                        'hex_y': hexagon['hex_y'],
-                        'hex_x_centroid': hexagon['hex_x_centroid'],
-                        'hex_y_centroid': hexagon['hex_y_centroid'],
-                        'hex_eta_centroid': hexagon['hex_eta_centroid'],
-                        'hex_phi_centroid': hexagon['hex_phi_centroid'],
-                        'ts_pt': hexagon['ts_pt'],
-                        'bins_overlapping': []
+
+        for hex_row in data.itertuples():
+            # Determine which index to use based on the subdet
+            if hex_row.ts_subdet in [1, 2]:
+                hex_key = (hex_row.ts_layer, hex_row.ts_wu, hex_row.ts_wv)
+                precomputed_entry = precomputed_index.get(hex_key)
+            elif hex_row.ts_subdet == 3:
+                hex_key = (hex_row.ts_layer, hex_row.ts_wu, hex_row.ts_wv)
+                precomputed_entry = scintillator_index.get(hex_key)
+            else:
+                continue  # Skip if subdet is not in the expected range
+
+            if precomputed_entry is not None:  # If a match is found
+                hex_info = {
+                    'event': hex_row.event,
+                    'layer': hex_row.ts_layer,
+                    'hex_x': hex_row.hex_x,
+                    'hex_y': hex_row.hex_y,
+                    'hex_eta_centroid': precomputed_entry['hex_eta_centroid'],
+                    'hex_phi_centroid': precomputed_entry['hex_phi_centroid'],
+                    'ts_pt': hex_row.ts_pt,
+                    'bins_overlapping': []
+                }
+
+                # Add overlapping bin details
+                for bin_overlap in precomputed_entry['overlapping_bins']:
+                    bin_info = {
+                        'percentage_overlap': bin_overlap['percentage_overlap'],
+                        'bin_layer': bin_overlap['bin_layer'],
+                        'centroid_eta': bin_overlap['bin_eta_centroid'],
+                        'centroid_phi': bin_overlap['bin_phi_centroid'],
+                        'eta_vertices': bin_overlap['bin_properties']['Eta_vertices'],
+                        'phi_vertices': bin_overlap['bin_properties']['Phi_vertices']
                     }
+                    hex_info['bins_overlapping'].append(bin_info)
 
-                    for bin_info in hexagon['bins_overlapping']:
-                        bin_data = {
-                            'x_vertices': bin_info['x_vertices'],
-                            'y_vertices': bin_info['y_vertices'],
-                            'eta_vertices': bin_info['eta_vertices'],
-                            'phi_vertices': bin_info['phi_vertices'],
-                            'centroid_eta': bin_info['centroid_eta'],
-                            'centroid_phi': bin_info['centroid_phi'],
-                            'percentage_overlap': bin_info['percentage_overlap']
-                        }
-                        hex_info['bins_overlapping'].append(bin_data)
-                    
-                    hexagon_info.append(hex_info)
+                hexagon_info.append(hex_info)
 
-                    # Update the maximum number of overlapping bins
-                    #num_overlapping_bins = len(hexagon['bins_overlapping'])
-                    #if num_overlapping_bins > max_overlapping_bins:
-                        #max_overlapping_bins = num_overlapping_bins
-
-        #print("max number of overlapping bins", max_overlapping_bins)
+        # Convert hexagon_info into a structured DataFrame
+        print("Converting to DataFrame...")
         df_hexagon_info = pd.DataFrame(hexagon_info)
-        print("before json")
-        print(df_hexagon_info.head())
-        df_hexagon_info.set_index(['event', 'layer'], inplace=True)  # Now, 'event' and 'layer' are part of the index, not regular columns. This enables hierarchical organization
+        df_hexagon_info.set_index(['event', 'layer'], inplace=True)
 
         return df_hexagon_info
