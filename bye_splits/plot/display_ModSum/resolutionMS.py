@@ -303,8 +303,8 @@ class Resolution():
         - A list of reconstructed jets for each event.
         """
 
-        print("df", df)
-        print("genpart_df", genpart_df)
+        #print("df", df)
+        #print("genpart_df", genpart_df)
         all_results = []
         all_jets = []
 
@@ -436,19 +436,20 @@ class Resolution():
 
         # Convert all results to a DataFrame for easier analysis
         results_df = pd.DataFrame(all_results)
-        print("results_df", results_df)
+        #print("results_df", results_df)
 
         # Save the results to a txt file
         results_df.to_csv(ouptput_txt, sep=',', index=False)
         return results_df, all_jets
 
     def perform_clustering_antikt(self, df, output_txt):
-        print("Input DataFrame:", df)
+        print("Performing antikt clustering for Minimum Bias sample")
+        #print("Input DataFrame:", df.columns)
         all_results = []
 
         # Get unique events from the data
         unique_events = df['event'].unique()
-        print("Unique events:", unique_events)
+        #print("Unique events:", unique_events)
 
         # Iterate over each unique event
         for event in unique_events:
@@ -460,7 +461,7 @@ class Resolution():
             for index, row in event_df.iterrows():
                 pt = row['pt']
                 if pt <= 0:
-                    continue  # Skip PseudoJet creation if pt is <= 0
+                    continue  # Skip PseudoJet creation if pt is <= 1 (selecting TTs only above 1GeV)
 
                 # Compute eta_center and phi_center using the mean of vertices
                 eta_center = np.mean(row['eta_vertices'])
@@ -493,13 +494,13 @@ class Resolution():
 
         # Convert all results to a DataFrame for easier analysis
         results_df = pd.DataFrame(all_results)
-        print("Results DataFrame:", results_df)
+        #print("Results DataFrame:", results_df)
 
         # Save the results to a txt file
         results_df.to_csv(output_txt, sep=',', index=False)
 
         # Count and print the number of jets reconstructed per event
         jet_counts = results_df.groupby('event').size()
-        print("Jet counts per event:", jet_counts)
+        #print("Jet counts per event:", jet_counts)
 
         return results_df, jet_counts
