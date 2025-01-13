@@ -4,15 +4,21 @@ import scipy.stats as stats
 from scipy.stats import norm
 import mplhep
 import argparse
+import os
 
 
 
 # Argument parser for customization
 parser = argparse.ArgumentParser(description="Generate analysis plots with custom settings.")
-parser.add_argument("--algo", type=str, default="16t", help="Algorithm used (e.g., 16t, DNN).")
-parser.add_argument("--subdet", type=str, default="Jets", help="Subdetector type (e.g., Jets, Calorimeter).")
-parser.add_argument("--events", type=str, default="PU0", help="Event description (e.g., PU0, PU200).")
+parser.add_argument("--algo", type=str, default="8towers", help="Algorithm used (e.g., baseline, area_overlap..).")
+parser.add_argument("--subdet", type=str, default="CEE_CEH", help="Subdetector type (e.g., 1,2,3 ...")
+parser.add_argument("--events", type=str, default="4k", help="Event description (e.g., 1k, 2k...")
+parser.add_argument("--particle", type=str, default="Jets", help="Event description (e.g., 1k, 2k...")
 args = parser.parse_args()
+
+# Create output directory dynamically
+output_dir = f'plots_{args.particle}_{args.algo}_{args.subdet}'
+os.makedirs(output_dir, exist_ok=True)
 
 # Define the effrms function
 def effrms(resp_bin, c=0.68):
@@ -29,7 +35,7 @@ use_eff_rms = True  # Set to True to use the eff_rms method
 
 # Load the data from the file and read the header
 data = []
-with open('area_overlap_pions_-1_5_PIONS_results.txt', 'r') as f: #matched_filtered_reordered_results.txt
+with open('8towers_jets_-1_5_PIONS_results.txt', 'r') as f: #matched_filtered_reordered_results.txt
     # Read the header line
     header = f.readline().strip().split(',')
     print("Header:", header)  # Optional: Print the header to check if it's correct
@@ -51,7 +57,8 @@ with open('area_overlap_pions_-1_5_PIONS_results.txt', 'r') as f: #matched_filte
             phi_diff = float(values[8]) if values[8] else np.nan
             pt_ratio = float(values[9]) if values[9] else np.nan
             matched = 1.0 if values[10] == 'True' else 0.0  # Convert 'True'/'False' to numeric values
-            data.append((event, gen_eta, gen_phi,gen_pt,reco_eta,reco_phi,reco_pt,eta_diff,phi_diff,pt_ratio, matched))
+            non_matched = 1.0 if values[10] == 'False' else 0.0
+            data.append((event, gen_eta, gen_phi,gen_pt,reco_eta,reco_phi,reco_pt,eta_diff,phi_diff,pt_ratio, matched, non_matched))
         else:
             print("line boh")
 # Convert the data into a numpy array for easier processing
@@ -71,7 +78,104 @@ eta_diffs = data[:, 7]
 phi_diffs = data[:, 8]
 pt_ratios = data[:, 9]
 matched = data[:, 10].astype(bool)
+non_matched = data[:, 11].astype(bool)
+
+
+matched= matched
+
 print("pt_ratios", pt_ratios)
+
+
+def plot_scatter(x, y, xlabel, ylabel, title, filename, xlims=None, ylims=None):
+    plt.figure(figsize=(10, 6))
+    plt.scatter(x, y, alpha=0.6, s=10, c='blue', label='All Events')
+    plt.xlabel(xlabel, fontsize=14)
+    plt.ylabel(ylabel, fontsize=14)
+    plt.title(title, fontsize=16)
+    if xlims:
+        plt.xlim(xlims)
+    if ylims:
+        plt.ylim(ylims)
+    plt.grid(alpha=0.5)
+    mplhep.cms.label('Private work', data=True, rlabel=f'{args.particle} PU0')
+    plt.legend()
+    plt.savefig(filename)
+    plt.close()
+
+
+# Gen vs Reco Eta (All Events)
+plot_scatter(
+    gen_etas, reco_etas,
+    r'$\eta^{gen}$', r'$\eta^{reco}$',
+    'Gen vs Reco Eta (All Events)',
+    f'{output_dir}/gen_vs_reco_eta_all_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png'
+)
+
+plot_scatter(
+    gen_etas[matched], reco_etas[matched],
+    r'$\eta^{gen}$', r'$\eta^{reco}$',
+    'Gen vs Reco Eta (Matched)',
+    f'{output_dir}/gen_vs_reco_eta_matched_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png'
+)
+
+# Gen vs Reco Eta (Non-Matched)
+plot_scatter(
+    gen_etas[non_matched], reco_etas[non_matched],
+    r'$\eta^{gen}$', r'$\eta^{reco}$',
+    'Gen vs Reco Eta (Non-Matched)',
+    f'{output_dir}/gen_vs_reco_eta_non_matched_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png'
+)
+
+# Gen vs Reco Phi (All Events)
+plot_scatter(
+    gen_phis, reco_phis,
+    r'$\phi^{gen}$', r'$\phi^{reco}$',
+    'Gen vs Reco Phi (All Events)',
+    f'{output_dir}/gen_vs_reco_phi_all_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png'
+)
+
+# Gen vs Reco Phi (Matched)
+plot_scatter(
+    gen_phis[matched], reco_phis[matched],
+    r'$\phi^{gen}$', r'$\phi^{reco}$',
+    'Gen vs Reco Phi (Matched)',
+    f'{output_dir}/gen_vs_reco_phi_matched_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png'
+)
+
+# Gen vs Reco Phi (Non-Matched)
+plot_scatter(
+    gen_phis[non_matched], reco_phis[non_matched],
+    r'$\phi^{gen}$', r'$\phi^{reco}$',
+    'Gen vs Reco Phi (Non-Matched)',
+    f'{output_dir}/gen_vs_reco_phi_non_matched_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png'
+)
+
+# Gen vs Reco Pt (All Events)
+plot_scatter(
+    gen_pts, reco_pts,
+    r'$p_T^{gen}$ [GeV]', r'$p_T^{reco}$ [GeV]',
+    'Gen vs Reco Pt (All Events)',
+    f'{output_dir}/gen_vs_reco_pt_all_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png',
+    xlims=(0, 200), ylims=(0, 200)
+)
+
+# Gen vs Reco Pt (Matched)
+plot_scatter(
+    gen_pts[matched], reco_pts[matched],
+    r'$p_T^{gen}$ [GeV]', r'$p_T^{reco}$ [GeV]',
+    'Gen vs Reco Pt (Matched)',
+    f'{output_dir}/gen_vs_reco_pt_matched_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png',
+    xlims=(0, 200), ylims=(0, 200)
+)
+
+# Gen vs Reco Pt (Non-Matched)
+plot_scatter(
+    gen_pts[non_matched], reco_pts[non_matched],
+    r'$p_T^{gen}$ [GeV]', r'$p_T^{reco}$ [GeV]',
+    'Gen vs Reco Pt (Non-Matched)',
+    f'{output_dir}/gen_vs_reco_pt_non_matched_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png',
+    xlims=(0, 200), ylims=(0, 200)
+)
 
 
 mask = matched
@@ -80,6 +184,8 @@ gen_etas = gen_etas[mask]
 gen_phis = gen_phis[mask]
 reco_pts = reco_pts[mask]
 pt_ratios = pt_ratios[mask]
+
+print("pt_ratios masked",pt_ratios )
 
 
 
@@ -96,7 +202,7 @@ plt.title('Distribution of Gen-Level Transverse Momentum ($p_{T}^{gen}$)', fonts
 
 # Add grid and style
 plt.grid(alpha=0.5)
-mplhep.cms.label('Private work', data=True, rlabel='Pions PU0')
+mplhep.cms.label('Private work', data=True, rlabel=f'{args.particle} PU0')
 
 # Save and display the plot
 #plt.savefig('gen_pt_distribution.png')
@@ -109,7 +215,8 @@ plt.close()
 
 
 # Define the number of bins for pt
-bin_edges = np.arange(0, 220, 20)
+bin_edges = np.arange(0, 200, 20)
+#bin_edges = np.arange(0, 220, 20)
 print("bin_edges", bin_edges)
 
 # Prepare to store results for each bin
@@ -185,10 +292,10 @@ plt.errorbar(
 plt.xticks(np.arange(0, 220, 50))
 plt.xlabel(r'$p_{T}^{gen} [GeV]$')
 plt.ylabel(r'$\sigma/\mu$')
-mplhep.cms.label('Private work', data=True, rlabel='Pions PU0')
+mplhep.cms.label('Private work', data=True, rlabel=f'{args.particle} PU0')
 plt.grid(True)
-plt.savefig(f'scale_plot_{args.algo}_{args.subdet}_{args.events}.pdf')
-plt.savefig(f'scale_plot_{args.algo}_{args.subdet}_{args.events}.png')
+plt.savefig(f'{output_dir}/scale_plot_{args.particle}_{args.algo}_{args.subdet}_{args.events}.pdf')
+plt.savefig(f'{output_dir}/scale_plot_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png')
 plt.close()
 
 #################
@@ -214,18 +321,18 @@ plt.axvline(mean_pt_ratio + std_pt_ratio, color='green', linestyle='--', linewid
 # Set plot labels and title
 plt.xlabel(r'$p_{T}^{reco} / p_{T}^{gen} $')
 plt.ylabel('Density')
-mplhep.cms.label('Private work', data=True, rlabel='Pions PU0')
+mplhep.cms.label('Private work', data=True, rlabel=f'{args.particle} PU0')
 plt.legend()
 plt.grid(True)
 
 # Save the new plot as a PDF
-plt.savefig(f'pt_ratio_{args.algo}_{args.subdet}_{args.events}.pdf')
-plt.savefig(f'pt_ratio_{args.algo}_{args.subdet}_{args.events}.png')
+plt.savefig(f'{output_dir}/pt_ratio_{args.particle}_{args.algo}_{args.subdet}_{args.events}.pdf')
+plt.savefig(f'{output_dir}/pt_ratio_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png')
 plt.close()
 
 
 # Apply filters to select only matched data
-mask = matched # Example filters
+mask = matched# Example filters
 filtered_eta_diffs = eta_diffs[mask]
 filtered_phi_diffs = phi_diffs[mask]
 
@@ -233,7 +340,7 @@ filtered_phi_diffs = phi_diffs[mask]
 eta_phi_diff_data = np.column_stack((filtered_eta_diffs, filtered_phi_diffs))
 
 # Save to a new text file
-output_file = f'filtered_eta_phi_diffs_{args.algo}_{args.subdet}_{args.events}.txt'
+output_file = f'{output_dir}/filtered_eta_phi_diffs_{args.particle}_{args.algo}_{args.subdet}_{args.events}.txt'
 np.savetxt(output_file, eta_phi_diff_data, fmt='%.8f', delimiter=',', header='eta_diff,phi_diff', comments='')
 
 print(f"Filtered eta_diff and phi_diff data saved to {output_file}")
@@ -290,7 +397,7 @@ pt_bin_widths = (pt_bins[1:] - pt_bins[:-1]) / 2
 plt.errorbar(pt_bin_centers, percentage_matched, 
              xerr=pt_bin_widths,
              yerr=[lo_err, up_err], 
-             fmt='o', color='#4682B4', label='Matched Pions (%)', capsize=3, alpha=0.7)
+             fmt='o', color='#4682B4', label=f'Matched {args.particle} (%)', capsize=3, alpha=0.7)
 
 # Add labels and title
 plt.xlabel(r'$p_{T}^{gen} \, [GeV]$', fontsize=14)
@@ -298,12 +405,12 @@ plt.ylabel('Percentage of Matched Jets (%)', fontsize=14)
 
 # Add grid and style
 plt.grid(alpha=0.5)
-mplhep.cms.label('Private work', data=True, rlabel='Pions PU0')
+mplhep.cms.label('Private work', data=True, rlabel=f'{args.particle} PU0')
 
 # Add legend
 plt.legend()
 
 # Save and display the plot
-plt.savefig(f'matched_percentage_pt_bins_with_errors_{args.algo}_{args.subdet}_{args.events}.png')
-plt.savefig(f'matched_percentage_pt_bins_with_errors_{args.algo}_{args.subdet}_{args.events}.pdf')
-plt.show()
+plt.savefig(f'{output_dir}/matched_percentage_pt_bins_with_errors_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png')
+plt.savefig(f'{output_dir}/matched_percentage_pt_bins_with_errors_{args.particle}_{args.algo}_{args.subdet}_{args.events}.pdf')
+plt.close()
