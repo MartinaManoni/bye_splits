@@ -1,5 +1,6 @@
 # coding: utf-8
 # python3 mainModuleSums.py --event -1 --geom V16 --algo baseline --particle pions --subdet 5
+# python3 mainModuleSums.py --event -1 --n 3 --geom V16 --algo baseline --particle photons --subdet 5 --inputfile hdf5
 
 _all_ = [ ]
 
@@ -28,10 +29,11 @@ def parse_arguments():
     parser.add_argument("--algo", default='8towers', help="Select algorithm (baseline, area_overlap, 8towers, 16towers)")
     parser.add_argument("--particle", default='photons', help="Select particle type (photons, pions or neutrinos)")
     parser.add_argument("--geom", default='V16', help="Select the CMSSW geometry (V11 or V16)")
+    parser.add_argument("--inputfile", default='root', help="Select input file type (root or hdf5)")
     return parser.parse_args()
 
 
-def main(subdet, event, particle, algo, n, geom):
+def main(subdet, event, particle, algo, n, geom, inputfile):
     process = processingMS.Processing() 
     #algorithms = algosMS.Algorithms()
     #resolution = resolutionMS.Resolution()
@@ -44,55 +46,67 @@ def main(subdet, event, particle, algo, n, geom):
     #file_path = f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/DoublePhotonsPU0_3k_V11/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5'
     if geom=='V11':
         print("using V11 geom")
-        file_path = (
+        hdf5_file = (
         '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/'
         'DoublePhotonsPU0_hadd_123_energy/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5'
         )
     elif geom=='V16' and particle == 'photons':
-        file_path = (
+        hdf5_file = (
         '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/'
         'SinglePhotonPU0V16/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5'
         )
         root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples/SinglePhotonPU0V16.root')
 
     elif geom=='V16' and particle == 'pions':
-        file_path = (
+        hdf5_file = (
         '/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/'
         'SinglePionPU0V16/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5'
         )
         root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples/SinglePionPU0V16.root')
 
     elif geom=='V16' and particle == 'neutrinos':
-        root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/MinBias_TuneCP5_14TeV-pythia8_Phase2Fall22DRMiniAOD-PU200_125X_mcRun4_realistic_v2-v1/skimmed_ntuples/Ntuple_1.root')
+        root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/MinBias_Fall22/skimmed_ntuples/Ntuple_1.root') #Hadd_MinBiasFall22_2ntuples.root #Ntuple_1.root
+    #/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/MinBias_TuneCP5_14TeV-pythia8_Phase2Fall22DRMiniAOD-PU200_125X_mcRun4_realistic_v2-v1/skimmed_ntuples/Ntuple_1.root
 
+    elif geom=='V16' and particle == 'jets':
+        root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/VBFHToInvisible_Spring23_noPU_GenEtaCut/skimmed_ntuples/Hadd_VBFHtoInv_2.root')
+    #/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/VBFHToInvisible_Spring23_noPU_NEW_2/skimmed_ntuples/Hadd_VBFHtoInvSpring23_2ntuples.root
 
-    # Skip get_gen_particles for neutrinos
-    if particle == 'neutrinos':
-        print("Skipping get_gen_particles for neutrinos")
-        df_gen, events = None, None  # Set these to None since gen variables are unavailable
+    if inputfile == "hdf5":
+        print("processing hdf5 file....")
+        data, events_to_process = process.get_data_new(event, n, geom, subdet, particle)
+        df_gen, events = process.get_genpart_data(hdf5_file, event, events_to_process, n)
+        df_specific = data
+
     else:
-        df_gen, events = process.get_gen_particles(root_file, n, event)
-        print("df_gen", df_gen)
-        print("events", events)
+        print("processing root file....")
+        # Skip get_gen_particles for neutrinos
+        if particle == 'neutrinos':
+            print("Skipping get_gen_particles for neutrinos")
+            df_gen, events = None, None  # Set these to None since gen variables are unavailable
+        else:
+            df_gen, events = process.get_gen_particles(root_file, particle, n, event)
+            print("df_gen col", df_gen.columns)
+            print("events", events)
 
-    # Create the specific data frame for the particle
-    if events is None or len(events) == 0:
-        selected_events = None
-    else:
-        selected_events = events
-
-    df_specific = process.read_root_and_create_dataframe(
-    root_file, subdet, selected_events= selected_events)
+        # Create the specific data frame for the particle
+        if events is None or len(events) == 0:
+            selected_events = None
+        else:
+            selected_events = events
 
 
-    #df_specific = process.read_root_and_create_dataframe(root_file, subdet, events)
-    #print("df_specific", df_specific)
-    #print("df_specific", df_specific.columns)
+        #print("selected_events", len(selected_events))
+
+        df_specific = process.read_root_and_create_dataframe(
+        root_file, subdet, selected_events= selected_events)
+
+        print("data col", df_specific.columns)
 
     #helper.read_hdf5_structure(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/photons_manoni/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5')
     #helper.read_all_block0_values(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/data/photons_manoni/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5')
 
-    bin_geojson_filename = '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_with_arcs.geojson'
+    bin_geojson_filename = '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_with_arcs.geojson' #bins_with_arcs
     hex_geojson_filename = '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_CMSSW.geojson'
     scint_geojson_filename = '/grid_mnt/vol_home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/scint_modules_geo.geojson'
 
@@ -116,7 +130,8 @@ def main(subdet, event, particle, algo, n, geom):
     #plotMS.plot_full_geom(bins_data, hexagons_data, scint_data, 'plot_layers', plot_type='all')
 
     if save_tower_bins:
-        process.create_and_save_tower_bins(initial_kw, geom) #create and save tower bins
+        print("creating and saving tower bins...")
+        process.create_and_save_tower_bins(initial_kw, df_specific, geom) #create and save tower bins
 
     process.ModSumToTowers(initial_kw, df_specific , subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, df_gen, geom)
 
@@ -126,7 +141,7 @@ def main(subdet, event, particle, algo, n, geom):
 
 if __name__ == '__main__':
     args = parse_arguments()
-    main(args.subdet, args.event, args.particle, args.algo, args.n, args.geom)
+    main(args.subdet, args.event, args.particle, args.algo, args.n, args.geom, args.inputfile)
 
     
 
