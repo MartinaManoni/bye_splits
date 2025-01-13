@@ -358,6 +358,8 @@ def plot_baseline(df_baseline_proj, algo, event, particle):
     plt.show()
 
 def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, subdet, results_df):
+
+    print("results_df", results_df.columns)
     #this works only for a single event : need to put options to gen data to take only the n events that coprrespond to one from data
     print("plotting eta_phi_towers")
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -409,13 +411,17 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
         #ax.text(data_gen['gen_eta'], data_gen['gen_phi'], f'.', color='red', ha='center', va='center', fontsize=5)
         #plt.scatter(data_gen['gen_eta'], data_gen['gen_phi'], marker='o', color='red')
     # Plot gen data points (handle multiple points if data_gen has more than one row)
-    if len(data_gen) > 1:
-        for idx, row in data_gen.iterrows():
-            ax.text(row['gen_eta'], row['gen_phi'], '.', color='red', ha='center', va='center', fontsize=8)
-    else:
-        ax.text(data_gen['gen_eta'].values[0], data_gen['gen_phi'].values[0], '.', color='red', ha='center', va='center', fontsize=8)
+    # Check if data_gen is not None
 
-    if particle == "pions":
+    if data_gen is not None and len(data_gen) > 0:
+        # Handle multiple points if data_gen has more than one row
+        if len(data_gen) > 1:
+            for idx, row in data_gen.iterrows():
+                ax.text(row['gen_eta'], row['gen_phi'], '.', color='red', ha='center', va='center', fontsize=8)
+        else:
+            ax.text(data_gen['gen_eta'].values[0], data_gen['gen_phi'].values[0], '.', color='red', ha='center', va='center', fontsize=8)
+
+    if particle == "pions" or particle == "jets" :
         # Plot jets as circles based on results_df
         for _, jet_row in results_df.iterrows():
             jet_eta = jet_row['reco_eta']
@@ -435,6 +441,19 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
             # Create a circle for each jet - FOR MATCHING
             circle2 = Circle((jet_eta, jet_phi), 0.1 , color='green', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.1$' )
             ax.add_patch(circle2)
+
+    if particle == "neutrinos":
+        # Plot jets as circles based on results_df
+        for _, jet_row in results_df.iterrows():
+            jet_eta = jet_row['reco_eta']
+            jet_phi = jet_row['reco_phi']
+            print("jet_eta", jet_eta)
+            print("jet_phi", jet_phi)
+            #jet_radius = 0.4  # This is the jet radius (Anti-kt algorithm radius)
+
+            # Create a circle for each jet
+            circle = Circle((jet_eta, jet_phi), 0.4 , color='red', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.4$')
+            ax.add_patch(circle)
 
     # Avoid duplicate legend entries
     handles, labels = ax.get_legend_handles_labels()
@@ -910,7 +929,7 @@ def plot_towers_xy_grid(df_baseline_proj, data_gen, algo, event, particle, subde
     cbar.set_label('Total pT [GeV]')
 
     # Set labels and title
-    ax.set_xlabel('X poistion [cm]')
+    ax.set_xlabel('X position [cm]')
     ax.set_ylabel('Y position [cm]')
     ax.set_title(f'{algo}_{particle}_{event}')
 
