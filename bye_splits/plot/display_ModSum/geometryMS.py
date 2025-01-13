@@ -46,6 +46,32 @@ class Geometry():
         self.ds_geom = GeometryData(reprocess=False, logger=log, library='plotly').provide()
 
     #TOWERS BINS 
+
+    def create_arc(self, x_start, y_start, x_stop, y_stop, center):
+        # Calculate radius based on the distance from the center to the starting point
+        radius = np.linalg.norm([x_start - center[0], y_start - center[1]])
+
+        # Calculate the start and end angles
+        start_angle = np.arctan2(y_start - center[1], x_start - center[0])
+        end_angle = np.arctan2(y_stop - center[1], x_stop - center[0])
+
+        # Ensure that the end angle is greater than the start angle
+        if end_angle < start_angle:
+            print("end_angle < start_angle")
+            end_angle += 2 * np.pi
+
+        # Generate angles for the arc
+        theta = np.linspace(start_angle, end_angle, 10)
+
+        # Calculate points on the arc
+        x = center[0] + radius * np.cos(theta)
+        y = center[1] + radius * np.sin(theta)
+
+        # Combine the starting point, arc, and end point into a single list of points
+        arc_points = np.column_stack([x, y])
+        arc_line = geom.LineString(arc_points)
+        return arc_line
+
     def create_bin_polygon(self, bin_x, bin_y, bin_eta, bin_phi, center):
         center_x = np.mean(bin_x)
         center_y = np.mean(bin_y)
