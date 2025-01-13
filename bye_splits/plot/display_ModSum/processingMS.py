@@ -18,6 +18,9 @@ import time
 import multiprocessing
 from shapely.strtree import STRtree
 
+import matplotlib.pyplot as plt
+import pandas as pd
+
 
 log = logging.getLogger(__name__)
 
@@ -58,37 +61,92 @@ class Processing():
         self.geometry= geometryMS.Geometry()
 
 
-    def get_gen_particles(self, root_file_path, n=None, event=None):
+    def get_gen_particles(self, root_file_path, particle, n=None, event=None):
         print("Read root file and create DF for generated particles")
 
         # Open the ROOT file and navigate to the TTree
         with uproot.open(root_file_path) as file:
             tree = file["l1tHGCalTriggerNtuplizer/HGCalTriggerNtuple"]
 
-            # Extract the necessary branches and rename them
-            branches = {
-                "good_genpart_exeta": "gen_eta",
-                "good_genpart_exphi": "gen_phi",
-                "good_genpart_energy": "gen_en",
-                "good_genpart_pt": "gen_pt",
-                "event": "event"
-            }
+            if particle == 'jets':
+                # Extract the necessary branches and rename them
+                branches = {
+                    "good_genjet_eta": "gen_eta",
+                    "good_genjet_phi": "gen_phi",
+                    "good_genjet_energy": "gen_en",
+                    "good_genjet_pt": "gen_pt",
+                    "event": "event",
+                    "jet_flag":"jet_flag",
+                }
+
+            else:
+                # Extract the necessary branches and rename them
+                branches = {
+                    "good_genpart_exeta": "gen_eta",
+                    "good_genpart_exphi": "gen_phi",
+                    "good_genpart_energy": "gen_en",
+                    "good_genpart_pt": "gen_pt",
+                    "event": "event"
+                }
 
             # Load branches into a dictionary of NumPy arrays
             arrays = tree.arrays(list(branches.keys()), library="np")
 
             # Flatten arrays and create a DataFrame
             data = {new_name: np.concatenate(arrays[old_name]) for old_name, new_name in branches.items() if old_name != "event"}
-            data["event"] = np.repeat(arrays["event"], [len(arr) for arr in arrays["good_genpart_exeta"]])
+            #data["event"] = np.repeat(arrays["event"], [len(arr) for arr in arrays["good_genpart_exeta"]])
 
-            df = pd.DataFrame(data)
-            baseline_selections = (df['gen_eta'] > 1.7) & (df['gen_eta'] < 2.8)
+            #df = pd.DataFrame(data)
+            #baseline_selections = (df['gen_eta'] > 1.7) & (df['gen_eta'] < 2.8)
+            if particle == 'jets':
+                data["event"] = np.repeat(arrays["event"], [len(arr) for arr in arrays["good_genjet_eta"]])
+                df = pd.DataFrame(data)
+                baseline_selections = (df['gen_eta'] > 1.7) & (df['gen_eta'] < 2.8) & (df['jet_flag']>=0)
+            else:
+                data["event"] = np.repeat(arrays["event"], [len(arr) for arr in arrays["good_genpart_exeta"]])
+                df = pd.DataFrame(data)
+                baseline_selections = (df['gen_eta'] > 1.7) & (df['gen_eta'] < 2.8)
+
             df = df[baseline_selections]
 
-            print("ciao", df)
+            # Ensure necessary columns are present in the dataframe
+            '''if 'gen_eta' in df.columns and 'gen_phi' in df.columns and 'gen_pt' in df.columns:
+                # Plot gen_eta distribution
+                plt.figure(figsize=(12, 4))
+
+                plt.subplot(1, 3, 1)
+                plt.hist(df['gen_eta'], bins=30, color='#4682B4', alpha=0.7)
+                plt.xlabel('gen_eta')
+                plt.ylabel('Count')
+                plt.title('Distribution of gen_eta')
+
+                # Plot gen_phi distribution
+                plt.subplot(1, 3, 2)
+                plt.hist(df['gen_phi'], bins=30, color='#4682B4', alpha=0.7)
+                plt.xlabel('gen_phi')
+                plt.ylabel('Count')
+                plt.title('Distribution of gen_phi')
+
+                # Plot gen_phi distribution
+                plt.subplot(1, 3, 3)
+                print("LEN PT", len(df['gen_pt']))
+                plt.hist(df['gen_pt'], bins=30, color='#4682B4', alpha=0.7)
+                plt.xlabel('gen_pt')
+                plt.ylabel('Count')
+                plt.title('Distribution of gen_pt')
+                #plt.yscale('log')
+
+                plt.tight_layout()
+                plt.show()
+            else:
+                print("Columns 'gen_eta' and 'gen_phi' are required for plotting.")
+
+            #print("ciao", df)'''
 
             # Get unique events
             unique_events = df['event'].unique()
+            print("unique_events", unique_events)
+            print("unique_events", len(unique_events))
 
             # Event selection logic
             if event is None:
@@ -111,18 +169,11 @@ class Processing():
                 print(f"Selected event: {event}")
                 selected_events = [event]
 
-            # Apply baseline selections (you can modify this selection as needed)
-            #baseline_selections = (df['gen_eta'] > 1.7) & (df['gen_eta'] < 2.8)
-            #filtered_df = df[baseline_selections]
-            #print("filtered_df", filtered_df)
-
             print("selected_events qui", selected_events)
             # Filter the DataFrame to only include the selected events
             filtered_df = df[df['event'].isin(selected_events)]
 
-
             filtered_df = filtered_df.reset_index(drop=True)
-            print("filtered_df 2", filtered_df)
 
             # Return the filtered DataFrame and list of selected events
             return filtered_df, selected_events
@@ -134,7 +185,7 @@ class Processing():
                 tree = file["l1tHGCalTriggerNtuplizer/HGCalTriggerNtuple"]
 
                 # Extract all branches with their new names
-                branches = {
+                ts_branches = {
                     "good_ts_layer": "ts_layer",
                     "good_ts_mipPt": "ts_mipPt",
                     "good_ts_pt": "ts_pt",
@@ -151,34 +202,35 @@ class Processing():
                 }
 
                 # Load branches into a dictionary of NumPy arrays
-                arrays = tree.arrays(list(branches.keys()), library="np")
+                ts_arrays = tree.arrays(list(ts_branches.keys()), library="np")
 
-                # Flatten arrays and create a DataFrame
-                data = {new_name: np.concatenate(arrays[old_name]) for old_name, new_name in branches.items() if old_name != "event"}
-                data["event"] = np.repeat(arrays["event"], [len(arr) for arr in arrays["good_ts_layer"]])
-
-                df = pd.DataFrame(data)
-                print("events", df["event"])
+                # Process ts_* data : Flatten arrays and create a DataFrame
+                ts_data = {new_name: np.concatenate(ts_arrays[old_name]) for old_name, new_name in ts_branches.items() if old_name != "event"}
+                ts_data["event"] = np.repeat(ts_arrays["event"], [len(arr) for arr in ts_arrays["good_ts_layer"]])
+                ts_df = pd.DataFrame(ts_data)
 
                 # Check if events should be filtered
                 if selected_events is not None:
                     # If events are specified, filter the DataFrame to only include those events
-                    df = df[df['event'].isin(selected_events)]
+                    ts_df = ts_df[ts_df['event'].isin(selected_events)]
                 else:
-                    df = df[df['event']==493403]
-                    print("EVENTS NEUTRINOS", df['event'])
+                    #df = df #[df['event']==493403]
+                    #print("EVENTS NEUTRINOS", df['event'])
+                    unique_events_count = ts_df['event'].nunique()
+                    print("Number of unique events:", unique_events_count)
 
-                # Apply baseline selections (you can modify this selection as needed)
-                baseline_selections = (df['ts_z'] > 0) & ((df['ts_mipPt'] > 0.5)) # Ensure positive z position
-                df = df[baseline_selections]
+                # Apply baseline selections for ts_df (you can modify this selection as needed)
+                baseline_selections_ts = (ts_df['ts_z'] > 0) & (ts_df['ts_mipPt'] > 0.5)  # Example: Ensure positive z position
+                ts_df = ts_df[baseline_selections_ts]
 
-                df = df.reset_index(drop=True)
+                # Reset the index after filtering
+                ts_df = ts_df.reset_index(drop=True)
 
-                # Process the event (assuming a similar processing function exists)
-                df = self.process_event_V16(df, subdet)
+                # Process the events if needed (you can adapt this step)
+                ts_df = self.process_event_V16(ts_df, subdet)
 
-                # Return the filtered DataFrame
-                return df
+                # Return both DataFrames (ts_df and tc_df)
+                return ts_df
 
 
     
@@ -327,6 +379,7 @@ class Processing():
                     block1_values = group['block1_values']
                     if block0_value == '-1':
                         if n is not None:
+                            # Convert events_to_process to integers for comparison
                             matching_indices = [i for i, v in enumerate(block0_values) if str(v) in events_to_process]
                             print("block0_values inside", block0_values)
                             for idx in matching_indices:
@@ -351,7 +404,7 @@ class Processing():
                     df = pd.DataFrame(block1_data, columns=block1_items)
                     df['event'] = events
                     print("GEN PART DF", df)
-                    return df
+                    return df, df['event']
                 else:
                     print("Error: 'block0_values', 'block1_items', or 'block1_values' not found in group {}.".format(group_name))
             else:
@@ -415,22 +468,13 @@ class Processing():
         """
         print("**Processing V16 geometry ...")
         print("df_ts QUII", df_ts.columns)
-        #x,y = self.sph2cart(data_gen['gen_eta'], data_gen['gen_phi'], z=322.)
 
         if subdet == 1 or subdet ==2:
             print(f"**Processing SUBDET {subdet}")
 
             #SILICON V16
             df_geo_si_V16 = self.geometry.create_si_mod_geometry_V16()
-            #print("df_geo_si_V16", df_geo_si_V16)
-
-            # Merge the DataFrames
-            print("df_ts ETA", df_ts["ts_eta"])
-            #print("df_geo_si_V16 ETA", df_geo_si_V16["ts_eta"])
-            print("df_ts PHI", df_ts["ts_phi"])
-            #print("df_geo_si_V16 PHI", df_geo_si_V16["ts_phi"])
             df_si_merged = pd.merge(left=df_ts, right=df_geo_si_V16, how='inner', on=['ts_layer', 'ts_wu', 'ts_wv'])
-            #df_si_merged = df_si_merged[(df_si_merged['ts_mipPt'] > 0.5) & (df_si_merged['ts_z'] > 0)]
             df_si_merged_subdet = df_si_merged[df_si_merged['ts_subdet'] == subdet]
             print("df_si_merged_subdet", df_si_merged_subdet)
 
@@ -439,9 +483,7 @@ class Processing():
 
             # Print the unique sequence of ts_layers
             print(f"Unique ts_layers for subdet {subdet}: {unique_ts_layers}")
-
             #plotMS.plot_layer_hexagons(df_si_merged, 11, x,y)
-            #print(f"df_subdet_{subdet} ts_subdet", df_si_merged_subdet["ts_subdet"])
             print(f"df_si_merged_subdet", df_si_merged_subdet.columns)
             return df_si_merged_subdet
 
@@ -473,14 +515,6 @@ class Processing():
             # Merge dataframes
             scintillator_df = pd.merge(left=df_ts_filtered, right=scint_mod_geom, how='inner',
                                             on=['ts_layer', 'ts_wu', 'ts_wv'])
-            #scintillator_df = scintillator_df[(scintillator_df['ts_mipPt'] > 0.5) & (scintillator_df['ts_z'] > 0)]
-            #print("df_ts_filtered COL", df_ts_filtered.columns)
-            #print("df_ts_filtered", df_ts_filtered)
-            #print("scintillator_df COL", scintillator_df.columns)
-            #print("scintillator_df ALL", scintillator_df)
-            #print("scintillator_df", scintillator_df['geometry'])
-            #print("scintillator_df VERTEX", scintillator_df['vertices_clockwise'])
-
             return scintillator_df
 
         elif subdet == 4:
@@ -695,13 +729,9 @@ class Processing():
         return closest_vertices
     
     
-    def create_and_save_tower_bins(self, kw, geom ):
-
+    def create_and_save_tower_bins(self, kw, df_data, geom ):
+        print("using df data to calculate bins", df_data.columns)
         if geom=='V16':
-            ts_keep = { 'waferu'       : 'ts_wu',
-                        'waferv'       : 'ts_wv',
-                        'layer'        : 'ts_layer'}
-            self.ds_geom['si']  = self.ds_geom['si'].rename(columns=ts_keep)
             max_layer = 47
         else:
             max_layer = 50
@@ -714,17 +744,14 @@ class Processing():
         # Iterate through each layer
         for layer in range(1, max_layer + 1):  # Loop through all layers from 1 to 50
             # Filter dataframe for the current layer based on the conditions
-            if (layer <= 29 and layer % 2 != 0) or (layer >= 30 and layer <= max_layer):
+            if (layer <= 26 and layer % 2 != 0) or (layer >= 27 and layer <= max_layer):
                 # Filter dataframe for the current layer
-                #print("here printing ds geom ",self.ds_geom['si'])
-                #print("here printing ds geom col",self.ds_geom['si'].columns)
-                layer_df = self.ds_geom['si'][self.ds_geom['si']['ts_layer'] == layer].copy()
-                
-                layer_df['z_appr'] = layer_df['z'] #since for V16 geometry we dont have the z position info, we assume to be the same as V11 at the moment #FIXME
-                # Extract unique 'z' values for the current layer
-                unique_z_values = layer_df['z_appr'].unique()[:1]   #select only the first entry cause there are multiple z values for approximation reasons
-                unique_l_values = layer_df['ts_layer'].unique()
-                #print("unique_l_values", unique_l_values)
+                layer_df = df_data[df_data['ts_layer'] == layer].copy()
+                print("layer_df", layer_df.columns)
+
+                unique_z_values = layer_df['ts_z'].unique()[:1]   #select only the first entry cause there are multiple z values for approximation reasons
+                unique_layer_values = layer_df['ts_layer'].unique()[:1] 
+                print("LAYER:", unique_layer_values, " Z:", unique_z_values)
                 layer_bins = []
 
                 # Calculate the bin widths for eta and phi
@@ -759,15 +786,7 @@ class Processing():
 
         df_bins = pd.DataFrame(bins_info)
 
-        '''for layer in range(1, 4):  # Iterate over the first two layers
-            if (layer % 2 != 0):
-                bins = df_bins.loc[df_bins['Layer'] == layer, 'Bins'].iloc[0][:5]  # Select the first 5 entries of 'Bins'
-                print(f'Layer {layer} - First 5 entries of Bins:')
-                for bin_info in bins:
-                    print(bin_info)
-                print('\n')'''
-
-        self.geometry.save_bin_geo(df_bins, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_with_arcs.geojson', f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_only_vertices.geojson')
+        self.geometry.save_bin_geo(df_bins, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_with_arcs_correct.geojson', f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_only_vertices_correct.geojson')
 
     def update_bins(self, baseline_df, bins_df):
         # Filter the bins from the first layer
@@ -901,8 +920,8 @@ class Processing():
         #hexagon_info_df = self.eval_hex_bin_overlap_scint(data, bin_geojson_filename, geom)
 
         #hexagon_info_df = self.eval_hex_bin_overlap_OK(data, bin_geojson_filename, geom)
-        filename_precomputed_silicon = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/hex_bin_precomputed_overlaps.json"
-        filename_precomputed_scint = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/tiles_bin_precomputed_overlaps.json"
+        filename_precomputed_silicon = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/hex_bin_precomputed_overlaps_corrected.json"
+        filename_precomputed_scint = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/tiles_bin_precomputed_overlaps_corrected.json"
         hexagon_info_df= self.eval_hex_bin_overlap_with_precomputed_jsons(data,filename_precomputed_silicon, filename_precomputed_scint ,geom)
         #print("eval overlap dataframe", hexagon_info_df.columns)
         print(hexagon_info_df.index.get_level_values('event').unique())
@@ -934,9 +953,9 @@ class Processing():
         #print("data_gen", data_gen)
         #print("data_gen columns", data_gen.columns)
 
-        if particle == "pions":
+        if particle == "pions" or particle == "jets":
             results_df, jets = self.resolution.perform_clustering_antikt_matched(df, data_gen, f'{algo}_{particle}_{event}_{subdet}_PIONS_results.txt')
-            print(results_df)
+            #print(results_df)
 
         elif particle == "photons":
             results_df = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, algo, subdet, window_size=12, subwindow_size=9)
@@ -944,9 +963,9 @@ class Processing():
 
         elif particle == "neutrinos":
             print("Sei arrivato!---antikt for neutrinos")
-            results_df, jet_counts = self.resolution.perform_clustering_antikt(df,f'{algo}_{particle}_{event}_{subdet}_results.txt' )
-            print("RESULTS NEUTRINO",results_df)
-            print("COUNTS",jet_counts)
+            results_df, jet_counts = self.resolution.perform_clustering_antikt(df,f'{algo}_{particle}_{event}_{subdet}_results_2Ntuples.txt' )
+            #print("RESULTS NEUTRINO",results_df)
+            #print("COUNTS",jet_counts)
 
 
         #plotMS.plot_energy_ratio_histogram()
