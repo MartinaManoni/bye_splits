@@ -6,6 +6,7 @@ import logging
 import time
 import pandas as pd
 import numpy as np
+import json
 from data_handle.data_process import *
 
 parent_dir = os.path.abspath(__file__ + 3 * '/..')
@@ -349,3 +350,90 @@ class Algorithms():
         print("Execution time loop - area 16towers:", end_time - start_time)
 
         return df_over_final
+
+
+
+
+    # Function to load bin geometry from a JSON file
+    def load_bins_from_json(bins_json_path):
+        print("load bins from json")
+        with open(bins_json_path, "r") as f:
+            bins_data = json.load(f)
+
+        # Parse bin information
+        bins = []
+        for feature in bins_data["features"]:
+            eta_vertices = feature["properties"]["Eta_vertices"]
+            phi_vertices = feature["properties"]["Phi_vertices"]
+            centroid_eta = np.mean(eta_vertices)
+            centroid_phi = np.mean(phi_vertices)
+            layer = feature["properties"]["Layer"]
+            bins.append({
+                "eta_vertices": eta_vertices,
+                "phi_vertices": phi_vertices,
+                "centroid_eta": centroid_eta,
+                "centroid_phi": centroid_phi,
+                "layer": layer
+            })
+
+        return pd.DataFrame(bins)
+
+    # Function to assign points to bins layer by layer
+    # Function to assign points to bins layer by layer
+    def assign_points_to_closest_bin_layer_by_layer(df, bins_df):
+        print("assign_points_to_closest_bin_layer_by_layer")
+        results = []
+
+        # Process by event and tc_layer
+        for (event, layer), group in df.groupby(["event", "tc_layer"]):
+            #print(event, layer)
+            # For each point in this group (layer), find the closest bin
+            for _, point in group.iterrows():
+                # Calculate the distance to each bin's centroid
+                distances = np.sqrt(
+                    (bins_df["centroid_eta"] - point["tc_eta"]) ** 2 +
+                    (bins_df["centroid_phi"] - point["tc_phi"]) ** 2
+                )
+
+                # Find the closest bin (the one with the minimum distance)
+                closest_bin_idx = distances.idxmin()
+                closest_bin = bins_df.loc[closest_bin_idx]
+
+                # Record result for this point, assign energy of the point to the closest bin
+                results.append({
+                    "event": event,
+                    "layer": layer,
+                    "eta_vertices": closest_bin["eta_vertices"],
+                    "phi_vertices": closest_bin["phi_vertices"],
+                    "pt": point["tc_pt"]  # Assign energy of the point to the closest bin
+                })
+
+        return pd.DataFrame(results)
+
+    # Function to group by event, eta_vertices, and phi_vertices, and sum the pt values
+    def group_and_sum_pts(final_df):
+        print("group_and_sum_pts")
+        # Group by event, eta_vertices, and phi_vertices and sum the pt values
+        # Convert eta_vertices and phi_vertices from lists to tuples (hashable)
+        final_df['eta_vertices'] = final_df['eta_vertices'].apply(tuple)
+        final_df['phi_vertices'] = final_df['phi_vertices'].apply(tuple)
+
+        # Group by event, eta_vertices_tuple, and phi_vertices_tuple and sum the pt values
+        df_baseline = final_df.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'pt': 'sum'}).reset_index()
+
+        return df_baseline
+
+
+    # Main function that integrates all steps
+    def process_and_assign_points_to_bins(self,df_STCs, bins_json_path):
+        # Load bins geometry from JSON
+        bins_df = Algorithms.load_bins_from_json(bins_json_path)
+
+        # Assign points to bins layer by layer
+        final_df = Algorithms.assign_points_to_closest_bin_layer_by_layer(df_STCs, bins_df)
+
+        # Group by event, eta_vertices, and phi_vertices, and sum the pt values
+        df_baseline = Algorithms.group_and_sum_pts(final_df)
+
+        # Return the final DataFrame with summed pt values
+        return df_baseline

@@ -1,6 +1,6 @@
 # coding: utf-8
 # python3 mainModuleSums.py --event -1 --geom V16 --algo baseline --particle pions --subdet 5
-# python3 mainModuleSums.py --event -1 --n 3 --geom V16 --algo baseline --particle photons --subdet 5 --inputfile hdf5
+# python3 mainModuleSums.py --event -1 --n 500 --geom V16 --algo baseline --particle pions --subdet 5 --inputfile root --STCs
 
 _all_ = [ ]
 
@@ -17,6 +17,7 @@ import helperMS
 import geometryMS
 import json
 import warnings
+import pandas as pd
 warnings.filterwarnings("ignore", category=UserWarning, message=".*subnormal.*")
 
 
@@ -30,10 +31,14 @@ def parse_arguments():
     parser.add_argument("--particle", default='photons', help="Select particle type (photons, pions or neutrinos)")
     parser.add_argument("--geom", default='V16', help="Select the CMSSW geometry (V11 or V16)")
     parser.add_argument("--inputfile", default='root', help="Select input file type (root or hdf5)")
+
+    # Boolean flag to toggle STCs option
+    parser.add_argument("--STCs", dest='STCs', action='store_true', help="Enable STCs")
+    parser.add_argument("--no-STCs", dest='STCs', action='store_false', help="Disable STCs")
     return parser.parse_args()
 
 
-def main(subdet, event, particle, algo, n, geom, inputfile):
+def main(subdet, event, particle, algo, n, geom, inputfile, STCs):
     process = processingMS.Processing() 
     #algorithms = algosMS.Algorithms()
     #resolution = resolutionMS.Resolution()
@@ -63,6 +68,9 @@ def main(subdet, event, particle, algo, n, geom, inputfile):
         'SinglePionPU0V16/fill_gencl_prova_SEL_all_REG_Si_SW_1_SK_default_CA_min_distance_NEV_100.hdf5'
         )
         root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples/SinglePionPU0V16.root')
+        if STCs:
+            print("Enabling STCs for Pions samples...")
+            root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/SinglePionPU0_noPU_STCS/skimmed_ntuples/SinglePionPU0_noPU_STCS_skimmed.root')
 
     elif geom=='V16' and particle == 'neutrinos':
         root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/MinBias_Fall22/skimmed_ntuples/Ntuple_1.root') #Hadd_MinBiasFall22_2ntuples.root #Ntuple_1.root
@@ -98,8 +106,43 @@ def main(subdet, event, particle, algo, n, geom, inputfile):
 
         #print("selected_events", len(selected_events))
 
-        df_specific = process.read_root_and_create_dataframe(
-        root_file, subdet, selected_events= selected_events)
+        if STCs:
+            if subdet == 1:
+                # Process df_specific only for subdet 1
+                print('processing subdet 1 - STCs')
+                df_specific = process.read_root_and_create_dataframe(
+                    root_file, subdet, selected_events=selected_events
+                )
+            elif subdet in [2, 3]: #per ora implemento solo singoli subdet no somma
+                # Process df_STCs for subdet 2, 3
+                #read_root_and_create_dataframe_STCS non contine process_V16 perche non necessario, solo scelgi il subet adatto
+                print(f'processing {subdet} - STCs')
+                df_STCs = process.read_root_and_create_dataframe_STCS(
+                    root_file, subdet,selected_events=selected_events
+                )
+                df_specific = None
+            elif subdet in [5]:
+                print(f'processing {subdet} - STCs')
+                df_specific = process.read_root_and_create_dataframe(
+                    root_file, 1, selected_events=selected_events
+                )
+                df_STCs_2 = process.read_root_and_create_dataframe_STCS(
+                    root_file, 2,selected_events=selected_events
+                )
+
+                df_STCs_3 = process.read_root_and_create_dataframe_STCS(
+                    root_file, 3,selected_events=selected_events
+                )
+
+                # Merge df_STCs_2 and df_STCs_3
+                df_STCs = pd.concat([df_STCs_2, df_STCs_3], ignore_index=True)
+            else:
+                raise ValueError(f"Unsupported subdet value: {subdet}")
+
+        else:
+            df_specific = process.read_root_and_create_dataframe(
+            root_file, subdet, selected_events= selected_events)
+            df_STCs = None
 
         print("data col", df_specific.columns)
 
@@ -133,7 +176,7 @@ def main(subdet, event, particle, algo, n, geom, inputfile):
         print("creating and saving tower bins...")
         process.create_and_save_tower_bins(initial_kw, df_specific, geom) #create and save tower bins
 
-    process.ModSumToTowers(initial_kw, df_specific , subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, df_gen, geom)
+    process.ModSumToTowers(initial_kw, df_specific, df_STCs, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, df_gen, geom, STCs)
 
     #geometry.save_bin_geo(towers_bins, f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_with_arcs.geojson', f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/bins_only_vertices.geojson')
     #geometry.save_bin_hex(f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/geojson/hexagons_CMSSW.geojson')
@@ -141,7 +184,7 @@ def main(subdet, event, particle, algo, n, geom, inputfile):
 
 if __name__ == '__main__':
     args = parse_arguments()
-    main(args.subdet, args.event, args.particle, args.algo, args.n, args.geom, args.inputfile)
+    main(args.subdet, args.event, args.particle, args.algo, args.n, args.geom, args.inputfile, args.STCs)
 
     
 

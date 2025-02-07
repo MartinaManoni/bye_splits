@@ -233,7 +233,62 @@ class Processing():
                 return ts_df
 
 
-    
+    def read_root_and_create_dataframe_STCS(self, root_file_path, subdet, selected_events):
+
+            #reassign subdet for TCs
+            if subdet ==3:
+                subdet = 10
+
+            print("Read root file and create DF")
+            # Open the ROOT file and navigate to the TTree
+            with uproot.open(root_file_path) as file:
+                tree = file["l1tHGCalTriggerNtuplizer/HGCalTriggerNtuple"]
+
+                # Extract all branches with their new names
+                tc_branches = {
+                    "good_tc_layer": "tc_layer",
+                    "good_tc_mipPt": "tc_mipPt",
+                    "good_tc_pt": "tc_pt",
+                    "good_tc_waferu": "tc_wu",
+                    "good_tc_waferv": "tc_wv",
+                    "good_tc_x": "tc_x",
+                    "good_tc_y": "tc_y",
+                    "good_tc_z": "tc_z",
+                    "good_tc_eta": "tc_eta",
+                    "good_tc_phi": "tc_phi",
+                    "good_tc_energy": "tc_energy",
+                    "good_tc_subdet": "tc_subdet",
+                    "event": "event"
+                }
+
+                # Load branches into a dictionary of NumPy arrays
+                tc_arrays = tree.arrays(list(tc_branches.keys()), library="np")
+
+                # Process tc_* data : Flatten arrays and create a DataFrame
+                tc_data = {new_name: np.concatenate(tc_arrays[old_name]) for old_name, new_name in tc_branches.items() if old_name != "event"}
+                tc_data["event"] = np.repeat(tc_arrays["event"], [len(arr) for arr in tc_arrays["good_tc_layer"]])
+                tc_df = pd.DataFrame(tc_data)
+
+                # Check if events should be filtered
+                if selected_events is not None:
+                    # If events are specified, filter the DataFrame to only include those events
+                    tc_df = tc_df[tc_df['event'].isin(selected_events)]
+                else:
+                    #df = df #[df['event']==493403]
+                    #print("EVENTS NEUTRINOS", df['event'])
+                    unique_events_count = tc_df['event'].nunique()
+                    print("Number of unique events:", unique_events_count)
+
+                # Apply baseline selections for ts_df (you can modify this selection as needed)
+                baseline_selections_tc = (tc_df['tc_z'] > 0) & (tc_df['tc_mipPt'] > 0.5)  # Example: Ensure positive z position
+                tc_df = tc_df[baseline_selections_tc]
+
+                # Reset the index after filtering
+                tc_df = tc_df.reset_index(drop=True)
+                tc_df = tc_df[tc_df['tc_subdet'] == subdet]
+
+                # Return both DataFrames (ts_df and tc_df)
+                return tc_df
 
     def random_event(self, f):
         return random.choice(self.list_events)
@@ -552,6 +607,7 @@ class Processing():
         else:
             print(f"Subdet {subdet} is not recognized.")
             return None
+
 
     def shift_hex_values(self, silicon_df_proc, df_geom, df_ts):
         """Shifting hexagons vertices based on difference between wx_center/wy_center (byesplit) and ts_x/ts_y (CMSSW),
@@ -898,83 +954,69 @@ class Processing():
         #print("SUMMED FINAL", summed_df)
 
         return final_df, summed_df
-            
-    def ModSumToTowers(self, kw, data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, data_gen, geom):
+
+    def apply_algorithm(self, hexagon_info_df, algo, subdet):
+        if algo == 'baseline':
+            return self.algorithms.baseline_by_event(hexagon_info_df, subdet)
+        elif algo == 'area_overlap':
+            return self.algorithms.area_overlap_by_event(hexagon_info_df, subdet)
+        elif algo == '8towers':
+            return self.algorithms.area_overlap_8Towers_by_event(hexagon_info_df, subdet)
+        elif algo == '16towers':
+            return self.algorithms.area_overlap_16Towers_by_event(hexagon_info_df, subdet)
+        else:
+            raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap', or '8towers'.")
+
+    def evaluate_resolution(self, df, data_gen, algo, particle, event, subdet):
+        if particle in ["pions", "jets"]:
+            return self.resolution.perform_clustering_antikt_matched(
+                df, data_gen, f'{algo}_{particle}_{event}_{subdet}_PIONS_results.txt'
+            )
+        elif particle == "photons":
+            results_df = self.resolution.eval_eta_phi_photon_resolution(
+                df, data_gen, algo, subdet, window_size=12, subwindow_size=9
+            )
+            self.resolution.save_eta_phi_differences(
+                results_df, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_12w_9sub.txt'
+            )
+            return results_df
+        elif particle == "neutrinos":
+            return self.resolution.perform_clustering_antikt(
+                df, f'{algo}_{particle}_{event}_{subdet}_results_2Ntuples.txt'
+            )
+
+    def ModSumToTowers(self, kw, data, STCs_data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, data_gen, geom, STCs):
         print('Mod sum to towers')
-
-        #print("data", data.columns)
-        #print("data gen", data_gen.columns)
-
-        #print("ts_en", "gen_pt")
-        #print(data['ts_pt'].sum(), data_gen['gen_pt'])
-
-        #self.check_pt(data, data_gen)
-        #print("data pt TS", data['ts_pt'].sum())
-        #print("data gen pt", data_gen['gen_en'])
-
-
-        #overlap_data = self.read_hdf5_file(hdf5_filename)
-        #print("DATA OGGI ", data)
-        #print("OVERLAP DATA INPUT columns ", overlap_data.columns)
-
-        #hexagon_info_df = self.eval_hex_bin_overlap_scint(data, bin_geojson_filename, geom)
-
-        #hexagon_info_df = self.eval_hex_bin_overlap_OK(data, bin_geojson_filename, geom)
         filename_precomputed_silicon = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/hex_bin_precomputed_overlaps_corrected.json"
         filename_precomputed_scint = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/tiles_bin_precomputed_overlaps_corrected.json"
-        hexagon_info_df= self.eval_hex_bin_overlap_with_precomputed_jsons(data,filename_precomputed_silicon, filename_precomputed_scint ,geom)
-        #print("eval overlap dataframe", hexagon_info_df.columns)
-        print(hexagon_info_df.index.get_level_values('event').unique())
 
-        #plotMS.plot_hex_bins(hexagon_info_df)
+        if STCs:
+            df_STC = self.algorithms.process_and_assign_points_to_bins(STCs_data, bin_geojson_filename)
 
-        #print("QUIIIIII, hexagon_info_df COLUMNS", hexagon_info_df.columns)
+            hexagon_info_df = self.eval_hex_bin_overlap_with_precomputed_jsons(data,filename_precomputed_silicon, filename_precomputed_scint ,geom)
+            df_algo = self.apply_algorithm(hexagon_info_df, algo, subdet)
 
-        if algo == 'baseline':
-            df_algo = self.algorithms.baseline_by_event(hexagon_info_df, subdet)
-            
-        elif algo == 'area_overlap':
-            df_algo = self.algorithms.area_overlap_by_event(hexagon_info_df, subdet)
+            merged_df = pd.concat([df_STC, df_algo])
+            final_df= merged_df.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'pt': 'sum'}).reset_index()
+            df , df_sum = self.apply_update_to_each_event(final_df, bin_geojson_filename)
+            return self.evaluate_resolution(df, data_gen, algo, particle, event, subdet)
 
-        elif algo == '8towers':
-            df_algo = self.algorithms.area_overlap_8Towers_by_event(hexagon_info_df, subdet)
-        
-        elif algo == '16towers':
-            df_algo = self.algorithms.area_overlap_16Towers_by_event(hexagon_info_df, subdet)
+            #results_df, jets = self.resolution.perform_clustering_antikt_matched(df_STC, data_gen, f'{algo}_{particle}_{event}_{subdet}_STCS_results.txt')
 
         else:
-            raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap' or '8towers'.")
+            hexagon_info_df= self.eval_hex_bin_overlap_with_precomputed_jsons(data,filename_precomputed_silicon, filename_precomputed_scint ,geom)
+            #print("eval overlap dataframe", hexagon_info_df.columns)
+            print(hexagon_info_df.index.get_level_values('event').unique())
 
-        df , df_sum = self.apply_update_to_each_event(df_algo, bin_geojson_filename)
+            #plotMS.plot_hex_bins(hexagon_info_df)
+            df_algo = self.apply_algorithm(hexagon_info_df, algo, subdet)
+            df , df_sum = self.apply_update_to_each_event(df_algo, bin_geojson_filename)
+            return self.evaluate_resolution(df, data_gen, algo, particle, event, subdet)
 
-        #print("Eta/Phi resolution evaluation...")
-        #print("df", df)
-        #print("df columns", df.columns)
-        #print("data_gen", data_gen)
-        #print("data_gen columns", data_gen.columns)
-
-        if particle == "pions" or particle == "jets":
-            results_df, jets = self.resolution.perform_clustering_antikt_matched(df, data_gen, f'{algo}_{particle}_{event}_{subdet}_PIONS_results.txt')
-            #print(results_df)
-
-        elif particle == "photons":
-            results_df = self.resolution.eval_eta_phi_photon_resolution(df, data_gen, algo, subdet, window_size=12, subwindow_size=9)
-            self.resolution.save_eta_phi_differences(results_df, f'{algo}_{particle}_{event}_{subdet}_eta_phi_resolution_12w_9sub.txt')
-
-        elif particle == "neutrinos":
-            print("Sei arrivato!---antikt for neutrinos")
-            results_df, jet_counts = self.resolution.perform_clustering_antikt(df,f'{algo}_{particle}_{event}_{subdet}_results_2Ntuples.txt' )
-            #print("RESULTS NEUTRINO",results_df)
-            #print("COUNTS",jet_counts)
-
-
-        #plotMS.plot_energy_ratio_histogram()
-        #plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
-        #print("data_gen", data_gen.columns)
-        #print("df_sum", df_sum.columns)
-        #print("event", event)
-        #plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet, results_df)
-        #plotMS.plot_towers_xy_grid(df_sum, data_gen, algo, event, particle, subdet)
+            #plotMS.plot_energy_ratio_histogram()
+            #plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
+            #plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet, results_df)
+            #plotMS.plot_towers_xy_grid(df_sum, data_gen, algo, event, particle, subdet)
 
     def compute_overlap(self, hex_polygon, hex_centroid, hex_properties, bins_layer):
         hex_centroid_x, hex_centroid_y = hex_centroid.x, hex_centroid.y
