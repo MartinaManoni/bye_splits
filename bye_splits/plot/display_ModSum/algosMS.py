@@ -180,8 +180,8 @@ class Algorithms():
         return df_2
 
 
-    def area_overlap_8Towers_by_event(self, df_hexagon_info, subdet):
-        print("Algorithm 1/8s towers ...")
+    def splitted_MS_Towers_by_event(self, df_hexagon_info, num_towers = 8):
+        print(f"Splitting Mod Sums into {num_towers} towers ...")
         start_time = time.time()
 
         # Initialize a list to store the results for all events
@@ -192,7 +192,6 @@ class Algorithms():
 
         # Iterate over each event
         for event in unique_events:
-            #print(f"Processing event {event}...")
 
             # Extract the DataFrame for the current event
             df_event = df_hexagon_info.loc[event]
@@ -225,98 +224,11 @@ class Algorithms():
 
                     # Calculate pt distribution
                     remaining_pt = total_pt
-                    top_bins = sorted_bins[:8] if num_bins > 8 else sorted_bins
+                    top_bins = sorted_bins[:num_towers] if num_bins > num_towers  else sorted_bins
                     for bin_info in top_bins:
-                        percent = round(bin_info['percentage_overlap'] * 8)
+                        percent = round(bin_info['percentage_overlap'] * num_towers )
                         percent = max(1, percent)  # Ensure at least 1
-                        pt_fraction = percent / 8
-                        pt_assigned = min(remaining_pt, pt_fraction * total_pt)
-                        bin_info['pt'] = pt_assigned
-                        remaining_pt -= pt_assigned
-                        if remaining_pt <= 0:
-                            #print("pt finished")
-                            break  # Stop assigning pt if all available pt is exhausted
-
-                    # Append results for the current layer to the event_results list
-                    all_event_results.extend(row['bins_overlapping'])
-
-        #print("All events results:", all_event_results)
-        # Calculate the execution time
-        end_time = time.time()
-        print("Execution time loop - area overlap by event:", end_time - start_time)
-
-        # Extract pt information for each bin and construct DataFrame
-        flattened_bins = []
-        for bin_info in all_event_results:
-            eta_vertices = bin_info['eta_vertices']
-            phi_vertices = bin_info['phi_vertices']
-            pt = bin_info['pt']
-            event = bin_info['event']
-            layer = bin_info['layer']
-            flattened_bins.append({'event': event, 'layer': layer, 'eta_vertices': tuple(eta_vertices), 'phi_vertices': tuple(phi_vertices), 'pt': pt})
-
-        # Convert the list of dictionaries to a DataFrame
-        flattened_bins_df = pd.DataFrame(flattened_bins)
-
-        # Group by event, eta_vertices, and phi_vertices and sum the pt
-        df_over_final = flattened_bins_df.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'pt': 'sum'}).reset_index()
-
-        total_pt = df_over_final['pt'].sum()
-        #print("Total pt sum:", total_pt)
-
-        print("Execution time loop - area 8towers:", end_time - start_time)
-
-        return df_over_final
-
-    def area_overlap_16Towers_by_event(self, df_hexagon_info, subdet):
-        print("Algorithm 1/16s towers ...")
-        start_time = time.time()
-
-        # Initialize a list to store the results for all events
-        all_event_results = []
-
-        # Get unique event indices
-        unique_events = df_hexagon_info.index.get_level_values('event').unique()
-
-        # Iterate over each event
-        for event in unique_events:
-            #print(f"Processing event {event}...")
-
-            # Extract the DataFrame for the current event
-            df_event = df_hexagon_info.loc[event]
-
-            # Get unique layer indices for the current event
-            unique_layers = df_event.index.get_level_values('layer').unique()
-
-            # Iterate over unique layer indices
-            for layer_idx in unique_layers:
-                # Filter DataFrame for the current layer
-                layer_df = df_event[df_event.index.get_level_values('layer') == layer_idx]
-
-                # Iterate over each row of the filtered DataFrame for the current layer
-                for _, row in layer_df.iterrows():
-                    # Initialize pt values for all bins to 0
-                    for bin_info in row['bins_overlapping']:
-                        bin_info['pt'] = 0.0
-                        bin_info['event'] = event  # Ensure event information is added
-                        bin_info['layer'] = layer_idx  # Ensure layer information is added
-
-                    total_pt = row['ts_pt']
-
-                    # Filter out bins with area overlap greater than 0
-                    filtered_bins = [bin_info for bin_info in row['bins_overlapping'] if bin_info['percentage_overlap'] > 0]
-                    num_bins = len(filtered_bins)
-
-                    # Sort bins based on percentage overlap in descending order
-                    sorted_bins = sorted(filtered_bins, key=lambda x: x['percentage_overlap'], reverse=True)
-
-                    # Calculate pt distribution
-                    remaining_pt = total_pt
-                    top_bins = sorted_bins[:16] if num_bins > 16 else sorted_bins
-                    for bin_info in top_bins:
-                        percent = round(bin_info['percentage_overlap'] * 16)
-                        percent = max(1, percent)  # Ensure at least 1
-                        pt_fraction = percent / 16
+                        pt_fraction = percent / num_towers 
                         pt_assigned = min(remaining_pt, pt_fraction * total_pt)
                         bin_info['pt'] = pt_assigned
                         remaining_pt -= pt_assigned
@@ -328,6 +240,7 @@ class Algorithms():
 
         # Calculate the execution time
         end_time = time.time()
+        print("Execution time loop:", end_time - start_time)
 
         # Extract pt information for each bin and construct DataFrame
         flattened_bins = []
@@ -347,12 +260,9 @@ class Algorithms():
 
         total_pt = df_over_final['pt'].sum()
 
-        print("Execution time loop - area 16towers:", end_time - start_time)
+        print("Execution time loop:", end_time - start_time)
 
         return df_over_final
-
-
-
 
     # Function to load bin geometry from a JSON file
     def load_bins_from_json(bins_json_path):
@@ -378,7 +288,6 @@ class Algorithms():
 
         return pd.DataFrame(bins)
 
-    # Function to assign points to bins layer by layer
     # Function to assign points to bins layer by layer
     def assign_points_to_closest_bin_layer_by_layer(df, bins_df):
         print("assign_points_to_closest_bin_layer_by_layer")

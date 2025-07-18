@@ -960,12 +960,14 @@ class Processing():
             return self.algorithms.baseline_by_event(hexagon_info_df, subdet)
         elif algo == 'area_overlap':
             return self.algorithms.area_overlap_by_event(hexagon_info_df, subdet)
+        elif algo == '4towers':
+            return self.algorithms.splitted_MS_Towers_by_event(hexagon_info_df, num_towers=4)
         elif algo == '8towers':
-            return self.algorithms.area_overlap_8Towers_by_event(hexagon_info_df, subdet)
+            return self.algorithms.splitted_MS_Towers_by_event(hexagon_info_df, num_towers=8)
         elif algo == '16towers':
-            return self.algorithms.area_overlap_16Towers_by_event(hexagon_info_df, subdet)
+            return self.algorithms.splitted_MS_Towers_by_event(hexagon_info_df, num_towers=16)
         else:
-            raise ValueError("Invalid algorithm specified. Choose 'baseline', 'area_overlap', or '8towers'.")
+            raise ValueError("Invalid algorithm specified")
 
     def evaluate_resolution(self, df, data_gen, algo, particle, event, subdet):
         if particle in ["pions", "jets"]:
@@ -991,6 +993,7 @@ class Processing():
         filename_precomputed_scint = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/tiles_bin_precomputed_overlaps_corrected.json"
 
         if STCs:
+            print("for STCS")
             df_STC = self.algorithms.process_and_assign_points_to_bins(STCs_data, bin_geojson_filename)
 
             hexagon_info_df = self.eval_hex_bin_overlap_with_precomputed_jsons(data,filename_precomputed_silicon, filename_precomputed_scint ,geom)
@@ -999,6 +1002,8 @@ class Processing():
             merged_df = pd.concat([df_STC, df_algo])
             final_df= merged_df.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'pt': 'sum'}).reset_index()
             df , df_sum = self.apply_update_to_each_event(final_df, bin_geojson_filename)
+            #plotMS.plot_towers_xy_grid(df_sum, data_gen, algo, event, particle, subdet)
+            #plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet, results_df)
             return self.evaluate_resolution(df, data_gen, algo, particle, event, subdet)
 
             #results_df, jets = self.resolution.perform_clustering_antikt_matched(df_STC, data_gen, f'{algo}_{particle}_{event}_{subdet}_STCS_results.txt')

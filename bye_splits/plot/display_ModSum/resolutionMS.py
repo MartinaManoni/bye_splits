@@ -210,7 +210,9 @@ class Resolution():
         all_results = []
         print("eval_eta_phi_photon_resolution")
         print("df", df)
+        print("df COLUMNS ------------------- MARTINA", df.columns)
         print("genpart_df", genpart_df)
+        print("genpart_df ------------------- MARTINA", genpart_df.columns)
 
         unique_events = df['event'].unique()
         print("unique_events", unique_events)

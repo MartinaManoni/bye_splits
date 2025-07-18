@@ -1,7 +1,9 @@
 # coding: utf-8
 # python3 mainModuleSums.py --event -1 --geom V16 --algo baseline --particle pions --subdet 5
-# python3 mainModuleSums.py --event -1 --n 500 --geom V16 --algo baseline --particle pions --subdet 5 --inputfile root --STCs
+# python3 mainModuleSums.py --event -1 --n 10 --geom V16 --algo 8towers --particle neutrinos --subdet 5 --inputfile root --STCs
+# python3 mainModuleSums.py --event -1 --n 4000 --geom V16 --algo 4towers --particle pions --subdet 5 --inputfile root --STCs
 
+# python3 mainModuleSums.py --event -1 --n 4000 --geom V16 --algo 4towers --particle photons --subdet 5 --inputfile root --no-STCs
 _all_ = [ ]
 
 import os
@@ -27,18 +29,19 @@ def parse_arguments():
     parser.add_argument("--subdet", type=int, default=1, help="1: CEE (has only silicon layers), 2: CEH - only silicon part, 3: CEH - only scint part, 4: CEH, all layers, 5: CEE + CEH")
     parser.add_argument("--event", default='5492', help="Select event number or -1 for all events")
     parser.add_argument("--n", type=int, default=None, help="Process n events (random ordering)")
-    parser.add_argument("--algo", default='8towers', help="Select algorithm (baseline, area_overlap, 8towers, 16towers)")
+    parser.add_argument("--algo", default='8towers', help="Select algorithm (baseline, area_overlap, 4towers, 8towers, 16towers)")
     parser.add_argument("--particle", default='photons', help="Select particle type (photons, pions or neutrinos)")
     parser.add_argument("--geom", default='V16', help="Select the CMSSW geometry (V11 or V16)")
     parser.add_argument("--inputfile", default='root', help="Select input file type (root or hdf5)")
 
     # Boolean flag to toggle STCs option
+    parser.add_argument("--PU200", dest='PU200', action='store_true', help="Use PU200 sample for VBF")
     parser.add_argument("--STCs", dest='STCs', action='store_true', help="Enable STCs")
     parser.add_argument("--no-STCs", dest='STCs', action='store_false', help="Disable STCs")
     return parser.parse_args()
 
 
-def main(subdet, event, particle, algo, n, geom, inputfile, STCs):
+def main(subdet, event, particle, algo, n, geom, inputfile, STCs, PU200):
     process = processingMS.Processing() 
     #algorithms = algosMS.Algorithms()
     #resolution = resolutionMS.Resolution()
@@ -70,15 +73,22 @@ def main(subdet, event, particle, algo, n, geom, inputfile, STCs):
         root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples/SinglePionPU0V16.root')
         if STCs:
             print("Enabling STCs for Pions samples...")
-            root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/SinglePionPU0_noPU_STCS/skimmed_ntuples/SinglePionPU0_noPU_STCS_skimmed.root')
+            root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples_STCS/SinglePionPU0V16_STCs.root')
 
     elif geom=='V16' and particle == 'neutrinos':
-        root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/MinBias_Fall22/skimmed_ntuples/Ntuple_1.root') #Hadd_MinBiasFall22_2ntuples.root #Ntuple_1.root
-    #/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/MinBias_TuneCP5_14TeV-pythia8_Phase2Fall22DRMiniAOD-PU200_125X_mcRun4_realistic_v2-v1/skimmed_ntuples/Ntuple_1.root
+        root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples/MinBiasPU200_Fall22.root')
+        if STCs:
+            print("Enabling STCs for MinBias samples...")
+            root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/MinBias_STCs_Final/skimmed_ntuples/Ntuple_1.root')
 
     elif geom=='V16' and particle == 'jets':
-        root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/VBFHToInvisible_Spring23_noPU_GenEtaCut/skimmed_ntuples/Hadd_VBFHtoInv_2.root')
-    #/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/VBFHToInvisible_Spring23_noPU_NEW_2/skimmed_ntuples/Hadd_VBFHtoInvSpring23_2ntuples.root
+        root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples/VBFHtoInvPU0.root')
+        if STCs and PU200:
+            print("Enabling STCs for Jets samples PU200...")
+            root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples_STCS/VBFHToInvisible_Spring23_PU200_100ntuples.root')
+        else:
+            print("Enabling STCs for Jets samples PU0...")
+            root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples/VBFHtoInvPU0_STCs_Ntuple12.root')
 
     if inputfile == "hdf5":
         print("processing hdf5 file....")
@@ -184,7 +194,7 @@ def main(subdet, event, particle, algo, n, geom, inputfile, STCs):
 
 if __name__ == '__main__':
     args = parse_arguments()
-    main(args.subdet, args.event, args.particle, args.algo, args.n, args.geom, args.inputfile, args.STCs)
+    main(args.subdet, args.event, args.particle, args.algo, args.n, args.geom, args.inputfile, args.STCs, args.PU200)
 
     
 
