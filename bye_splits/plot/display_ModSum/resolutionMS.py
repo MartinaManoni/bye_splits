@@ -290,7 +290,7 @@ class Resolution():
             for eta_diff, phi_diff in zip(eta_diffs, phi_diffs):
                 file.write(f"{eta_diff},{phi_diff}\n")
 
-    def perform_clustering_antikt_matched(self, df, genpart_df, ouptput_txt):
+    def perform_clustering_antikt_matched(self, df, genpart_df, output_txt, output_dir=None):
         """
         This function clusters particle data using the Anti-kt algorithm and matches reconstructed jets to generated particles.
 
@@ -440,8 +440,15 @@ class Resolution():
         results_df = pd.DataFrame(all_results)
         #print("results_df", results_df)
 
+        # Set full path for output file
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+            output_path = os.path.join(output_dir, output_txt)
+        else:
+            output_path = output_txt  # Save 
+
         # Save the results to a txt file
-        results_df.to_csv(ouptput_txt, sep=',', index=False)
+        results_df.to_csv(output_path, sep=',', index=False)
         return results_df, all_jets
 
     def perform_clustering_antikt(self, df, output_txt):

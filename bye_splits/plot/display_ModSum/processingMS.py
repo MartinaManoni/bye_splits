@@ -969,10 +969,10 @@ class Processing():
         else:
             raise ValueError("Invalid algorithm specified")
 
-    def evaluate_resolution(self, df, data_gen, algo, particle, event, subdet):
+    def evaluate_resolution(self, df, data_gen, algo, particle, event, subdet, output_file=None):
         if particle in ["pions", "jets"]:
             return self.resolution.perform_clustering_antikt_matched(
-                df, data_gen, f'{algo}_{particle}_{event}_{subdet}_PIONS_results.txt'
+                df, data_gen, f'{algo}_{particle}_{event}_{subdet}_{output_file}_results.txt', f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/output_Jets_txt_16towersPU200_02antikt_TT3/'
             )
         elif particle == "photons":
             results_df = self.resolution.eval_eta_phi_photon_resolution(
@@ -987,7 +987,7 @@ class Processing():
                 df, f'{algo}_{particle}_{event}_{subdet}_results_2Ntuples.txt'
             )
 
-    def ModSumToTowers(self, kw, data, STCs_data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, data_gen, geom, STCs):
+    def ModSumToTowers(self, kw, data, STCs_data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, data_gen, geom, STCs, output_file):
         print('Mod sum to towers')
         filename_precomputed_silicon = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/hex_bin_precomputed_overlaps_corrected.json"
         filename_precomputed_scint = "/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/tiles_bin_precomputed_overlaps_corrected.json"
@@ -1004,7 +1004,7 @@ class Processing():
             df , df_sum = self.apply_update_to_each_event(final_df, bin_geojson_filename)
             #plotMS.plot_towers_xy_grid(df_sum, data_gen, algo, event, particle, subdet)
             #plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet, results_df)
-            return self.evaluate_resolution(df, data_gen, algo, particle, event, subdet)
+            return self.evaluate_resolution(df, data_gen, algo, particle, event, subdet, output_file)
 
             #results_df, jets = self.resolution.perform_clustering_antikt_matched(df_STC, data_gen, f'{algo}_{particle}_{event}_{subdet}_STCS_results.txt')
 
@@ -1016,7 +1016,7 @@ class Processing():
             #plotMS.plot_hex_bins(hexagon_info_df)
             df_algo = self.apply_algorithm(hexagon_info_df, algo, subdet)
             df , df_sum = self.apply_update_to_each_event(df_algo, bin_geojson_filename)
-            return self.evaluate_resolution(df, data_gen, algo, particle, event, subdet)
+            return self.evaluate_resolution(df, data_gen, algo, particle, event, subdet, output_file)
 
             #plotMS.plot_energy_ratio_histogram()
             #plotMS.plot_eta_phi_resolution(df_resolution, algo, event, particle, subdet)
