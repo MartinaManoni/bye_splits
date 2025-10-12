@@ -1,20 +1,31 @@
 //g++ -o fit_photons_resolution fit_photons_resolution.cpp `root-config --cflags --glibs` -lRooFit -lRooFitCore
 
-//./fit_photons_resolution baseline_photons_-1_5_eta_phi_resolution_12w_9sub.txt baseline -1 PHOTONS CEE_CEH double_sided_crystal_ball
+//./fit_photons_resolution baseline_pions_-1_5_eta_phi_resolution_12w_9sub.txt baseline -1 PIONS_with_dummy CEE_CEH double_sided_crystal_ball
 //./fit_photons_resolution 8towers_photons_-1_5_eta_phi_resolution_12w_9sub.txt 8towers_NEW -1 PHOTONS CEE_CEH double_sided_crystal_ball
 //./fit_photons_resolution 16towers_photons_-1_5_eta_phi_resolution_12w_9sub.txt 16towers -1 PHOTONS CEE_CEH double_sided_crystal_ball
 //./fit_photons_resolution area_overlap_photons_-1_5_eta_phi_resolution_12w_9sub.txt area_overlap -1 PHOTONS CEE_CEH double_sided_crystal_ball
 
 //./fit_photons_resolution 8towers_photons_-1_5_eta_phi_resolution_hadd_123_subw_5x5_OK.txt 8towers -1 PHOTONS CEE_CEH double_sided_crystal_ball
+//./fit_photons_resolution area_overlap_pions_-1_5_PIONS_results.txt area_overlap -1 PIONS CEE_CEH double_sided_crystal_ball
 
+//./fit_photons_resolution filtered_eta_phi_diffs_Pions_8towers_CEE_CEH_DeltaR01_4k.txt 8towers 4k Pions CEH_CEH double_sided_crystal_ball
 
-//./fit_photons_resolution filtered_eta_phi_diffs_8towers_CEE_CEH_4k.txt 8towers -1 pions CEE_CEH double_sided_crystal_ball
+//./fit_photons_resolution 16towers_photons_-1_5_eta_phi_resolution_12w_9sub.txt 16towers 4k Photons CEH_CEH double_sided_crystal_ball
+
+//./fit_photons_resolution filtered_eta_phi_diffs_Pions_baseline_CEE_Mod_CEH_STC_1k.txt baseline 1k pions CEH_CEH_STCs double_sided_crystal_ball
+
 //baseline_photons_188526_1_eta_phi_resolution_hadd_123_subw_5x5_OK.txt
 //baseline_photons_188526_5_eta_phi_resolution_hadd_123_subw_5x5_OK.txt
 //16towers_photons_188526_5_eta_phi_resolution_hadd_123_subw_5x5_OK.txt
 
 //baseline_photons_187775_1_eta_phi_resolution_hadd_123_subw_5x5_OK.txt
 //double_sided_crystal_ball
+
+//./fit_photons_resolution 4towers_photons_-1_5_eta_phi_resolution_12w_9sub.txt 4towers 4k PHOTONS CEE_CEH double_sided_crystal_ball
+
+////./fit_photons_resolution filtered_eta_phi_diffs_PIONS_8towers_CEE_Mod_CEH_STC_4k.txt 8towers 4k FINAL_PIONS CEH_CEH_STCs double_sided_crystal_ball
+
+// ./fit_photons_resolution filtered_eta_phi_diffs_JETS_16towers_200PUantikt02_TT2_CEE_Mod_CEH_STC_4k.txt 16towersPU200antikt02_TT2 4k FINAL_JETS CEH_CEH_STCs double_sided_crystal_ball
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -36,7 +47,12 @@
 #include <TLatex.h>
 #include <TLegend.h>
 
+// CMS style macros
+#include "tdrstyle.C"
+#include "CMS_lumi.C"
+
 using namespace RooFit;
+
 
 // Define a custom Double-Sided Crystal Ball function
 class RooDoubleSidedCB : public RooAbsPdf {
@@ -95,54 +111,6 @@ protected:
     }
 };
 
-
-/*// Updated class for a Double-Sided Crystal Ball
-class RooDoubleSidedCB : public RooAbsPdf {
-public:
-    RooDoubleSidedCB(const char* name, const char* title,
-                     const RooAbsReal& x, const RooAbsReal& mean, const RooAbsReal& sigma,
-                     const RooAbsReal& alphaL, const RooAbsReal& nL,
-                     const RooAbsReal& alphaR, const RooAbsReal& nR)
-        : RooAbsPdf(name, title),
-          x_("x", "x", this, const_cast<RooAbsReal&>(x)),
-          mean_("mean", "mean", this, const_cast<RooAbsReal&>(mean)),
-          sigma_("sigma", "sigma", this, const_cast<RooAbsReal&>(sigma)),
-          alphaL_("alphaL", "alphaL", this, const_cast<RooAbsReal&>(alphaL)),
-          nL_("nL", "nL", this, const_cast<RooAbsReal&>(nL)),
-          alphaR_("alphaR", "alphaR", this, const_cast<RooAbsReal&>(alphaR)),
-          nR_("nR", "nR", this, const_cast<RooAbsReal&>(nR)) {}
-
-    // Evaluate the PDF
-    Double_t evaluate() const override {
-        Double_t t = (x_ - mean_) / sigma_;
-        if (t < -alphaL_) {
-            Double_t a = std::pow(nL_ / alphaL_, nL_) * exp(-0.5 * alphaL_ * alphaL_);
-            Double_t b = nL_ / alphaL_ - alphaL_;
-            return a * std::pow(b - t, -nL_);
-        } else if (t > alphaR_) {
-            Double_t a = std::pow(nR_ / alphaR_, nR_) * exp(-0.5 * alphaR_ * alphaR_);
-            Double_t b = nR_ / alphaR_ - alphaR_;
-            return a * std::pow(b + t, -nR_);
-        } else {
-            return exp(-0.5 * t * t);
-        }
-    }
-
-    // Implement the clone method
-    TObject* clone(const char* newname) const override {
-        return new RooDoubleSidedCB(newname, this->GetTitle(), x_.arg(), mean_.arg(), sigma_.arg(),
-                                    alphaL_.arg(), nL_.arg(), alphaR_.arg(), nR_.arg());
-    }
-
-private:
-    RooRealProxy x_;
-    RooRealProxy mean_;
-    RooRealProxy sigma_;
-    RooRealProxy alphaL_;
-    RooRealProxy nL_;
-    RooRealProxy alphaR_;
-    RooRealProxy nR_;
-};*/
 
 void plot_eta_phi_resolution_from_file(const std::string& file_path, const std::string& algo, const std::string& event, const std::string& particle, const std::string& subdet, const std::string& fit_type) {
     std::ifstream file(file_path);
