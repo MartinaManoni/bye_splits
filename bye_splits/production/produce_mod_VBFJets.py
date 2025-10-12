@@ -71,8 +71,9 @@ ROOT.gInterpreter.Declare("""
 #include <set>
 #include <cmath>
 #include <vector>
-#include <iostream> // for print statements
+#include <iostream> // For print statements
 
+// Define the function to process events and flag them accordingly
 std::tuple<ROOT::VecOps::RVec<int>, ROOT::VecOps::RVec<int>> GetVBFEventFlags(
     const ROOT::VecOps::RVec<int>& particle_pdgid,
     const ROOT::VecOps::RVec<int>& particle_status,
@@ -82,19 +83,16 @@ std::tuple<ROOT::VecOps::RVec<int>, ROOT::VecOps::RVec<int>> GetVBFEventFlags(
     const ROOT::VecOps::RVec<float>& jet_eta,
     const ROOT::VecOps::RVec<float>& jet_phi
 ) {
-    // Threshold for delta R
+    // Threshold for delta R matching
     const float deltaR_threshold = 0.1;
 
-    // To store indices of processed daughters
-    std::set<int> processed_daughters;
-
-    // Initialize flags for jets (all set to false initially)
-    ROOT::VecOps::RVec<bool> jet_flags(jet_eta.size(), false);
-
     // Initialize event flag to good (0 by default)
-    int event_flag = 0; // 0 means good event, 1 means bad event
+    int event_flag = 0; // 0 for good events, -1 for bad events
 
-    // Iterate over all particles
+    // Initialize flags for jets (all set to -1 initially for unmatched jets)
+    ROOT::VecOps::RVec<int> jet_flags(jet_eta.size(), -1);
+
+    // Iterate over all particles to check for bad events (gluons with status 21)
     for (size_t i = 0; i < particle_pdgid.size(); ++i) {
         int particle_pdgid_current = particle_pdgid[i];
         int particle_status_current = particle_status[i];
@@ -102,30 +100,34 @@ std::tuple<ROOT::VecOps::RVec<int>, ROOT::VecOps::RVec<int>> GetVBFEventFlags(
         // Check if the particle is a gluon (PDG ID 21) with status 21
         if (particle_pdgid_current == 21 && particle_status_current == 21) {
             // If a gluon mother with status 21 is found, flag the event as bad
-            event_flag = 1; // Mark event as bad
-            std::cout << "Bad event: Found gluon (PDG ID: 21) with status 21" << std::endl;
+            event_flag = -1; // Mark event as bad
+            //std::cout << "Bad event: Found gluon (PDG ID: 21) with status 21" << std::endl;
             break; // No need to process further if the event is bad
         }
     }
 
     // Only proceed to quark mother processing if the event is not bad
     if (event_flag == 0) {
-        // Iterate over all particles again to check for quark mothers with status 21
+        // To store indices of processed quark daughters to avoid duplicates
+        std::set<int> processed_daughters;
+
+        // Iterate over all particles to find quark mothers with status 21
         for (size_t i = 0; i < particle_pdgid.size(); ++i) {
             int particle_pdgid_current = particle_pdgid[i];
             int particle_status_current = particle_status[i];
 
             // Check if the particle is a quark (PDG ID 1-6 or -1 to -6) with status 21
             if (std::abs(particle_pdgid_current) >= 1 && std::abs(particle_pdgid_current) <= 6 && particle_status_current == 21) {
-                // Print out the particle information
+                // Print out the quark mother information
                 //std::cout << "Found quark mother (PDG ID: " << particle_pdgid_current 
-                        //  << ") with status 21. Checking daughters..." << std::endl;
+                        // << ") with status 21. Checking daughters..." << std::endl;
 
-                // Retrieve the daughters of the current particle
+                // Retrieve the daughters of the current quark mother
                 const ROOT::VecOps::RVec<int>& daughters_indices = particle_daughters[i];
 
-                // Process the quark daughters
+                // Process each daughter
                 for (auto daughter_index : daughters_indices) {
+                    // Validate daughter index
                     if (daughter_index >= 0 && daughter_index < static_cast<int>(particle_pdgid.size())) {
                         // Skip if the daughter has already been processed
                         if (processed_daughters.find(daughter_index) != processed_daughters.end()) {
@@ -133,7 +135,9 @@ std::tuple<ROOT::VecOps::RVec<int>, ROOT::VecOps::RVec<int>> GetVBFEventFlags(
                         }
 
                         int daughter_pdgid = particle_pdgid[daughter_index];
-                        if (std::abs(daughter_pdgid) >= 1 && std::abs(daughter_pdgid) <= 6) { // Check if it's a quark
+                        // Check if the daughter is a quark
+                        if (std::abs(daughter_pdgid) >= 1 && std::abs(daughter_pdgid) <= 6) {
+                            // Mark the daughter as processed
                             processed_daughters.insert(daughter_index);
 
                             float eta = particle_eta[daughter_index];
@@ -141,52 +145,97 @@ std::tuple<ROOT::VecOps::RVec<int>, ROOT::VecOps::RVec<int>> GetVBFEventFlags(
 
                             // Print out daughter particle details
                             //std::cout << "Processing quark daughter (PDG ID: " << daughter_pdgid
-                                    //  << ") with eta: " << eta << " and phi: " << phi << std::endl;
+                                //      << ") with eta: " << eta << " and phi: " << phi << std::endl;
 
-                            // Check matching with gen jets
-                            for (size_t j = 0; j < jet_eta.size(); ++j) {
-                                float delta_eta = eta - jet_eta[j];
-                                float delta_phi = std::abs(phi - jet_phi[j]);
-                                if (delta_phi > M_PI) delta_phi = 2 * M_PI - delta_phi; // Wrap-around for phi
-                                float deltaR = std::sqrt(delta_eta * delta_eta + delta_phi * delta_phi);
+                            // Filter daughters based on eta range (1.7 to 2.8)
+                            if (eta >= 1.7 && eta <= 2.8) {
+                            
+                                const bool use_closest_matching = false; // Set to true for closest matching, false for deltaR matching
+                                const float deltaR_threshold = 0.1;
+                            
+                                // Variables to track the closest jet
+                                if (use_closest_matching) {
+                                
+                                    float closest_deltaR = std::numeric_limits<float>::max(); // Initialize to a large value
+                                    int closest_jet_index = -1; // Initialize to -1 (no jet matched yet)
+                                
+                                    // Check matching with gen jets
+                                    for (size_t j = 0; j < jet_eta.size(); ++j) {
+                                        //std::cout << "jet_eta[j]: " << jet_eta[j] << std::endl;
+                                        //std::cout << "jet_phi[j]: " << jet_phi[j] << std::endl;
 
-                                if (deltaR < deltaR_threshold) {
-                                    jet_flags[j] = true; // Set flag to true for matched jet
-                                    //std::cout << "Match found for quark daughter (PDG ID: " << daughter_pdgid
-                                              //<< ") with gen jet | ΔR: " << deltaR << std::endl;
+                                        float delta_eta = eta - jet_eta[j];
+                                        float delta_phi = std::abs(phi - jet_phi[j]);
+                                        if (delta_phi > M_PI) delta_phi = 2 * M_PI - delta_phi; // Wrap-around for phi
+                                        float deltaR = std::sqrt(delta_eta * delta_eta + delta_phi * delta_phi);
+
+                                        //std::cout << "--deltaR--" << deltaR << std::endl;
+
+                                        // Check if this jet is the closest so far
+                                        if (j == 0 || deltaR < closest_deltaR) {
+                                            closest_deltaR = deltaR;
+                                            closest_jet_index = j;
+                                        }
+                                    }
+
+                                    // Mark the closest jet as matched if found
+                                    if (closest_jet_index != -1) {
+                                        jet_flags[closest_jet_index] = 0; // Set flag to 0 for the matched closest jet
+                                        //std::cout << "Closest match found for quark daughter (PDG ID: " << daughter_pdgid
+                                            // << ") with gen jet index: " << closest_jet_index << " | ΔR: " << closest_deltaR << std::endl;
+                                    }
+                                }
+                                else{
+                                    // DeltaR threshold matching logic
+                                    for (size_t j = 0; j < jet_eta.size(); ++j) {
+                                        float delta_eta = eta - jet_eta[j];
+                                        float delta_phi = std::abs(phi - jet_phi[j]);
+                                        if (delta_phi > M_PI) delta_phi = 2 * M_PI - delta_phi;
+                                        float deltaR = std::sqrt(delta_eta * delta_eta + delta_phi * delta_phi);
+
+                                        if (deltaR <= deltaR_threshold) {
+                                            jet_flags[j] = 0;
+                                        }
+                                    }
                                 }
                             }
-                        }
+                        }   
                     }
                 }
             }
         }
     }
 
-    // If the event is bad, mark all jet flags as false (no need to check jets)
-    if (event_flag == 1) {
+    // If the event is bad, mark all jet flags as -1 (unmatched)
+    if (event_flag == -1) {
         for (size_t j = 0; j < jet_flags.size(); ++j) {
-            jet_flags[j] = false; // Mark the jets as unmatched for a bad event
+            jet_flags[j] = -1; // Mark the jets as unmatched for a bad event
         }
     }
 
     // Print event flag status
-    //std::cout << "Event flag: " << event_flag << " (0: good, 1: bad)" << std::endl;
+    //std::cout << "Event flag: " << event_flag << " (0: good, -1: bad)" << std::endl;
 
-    // Return separate event flag and jet flags
+    // Create the output vectors: one for event flag and one for jet flags
     ROOT::VecOps::RVec<int> output_event_flag = {event_flag};
     ROOT::VecOps::RVec<int> output_jet_flags;
+
+    // Populate the jet flags vector
     for (size_t j = 0; j < jet_flags.size(); ++j) {
-        output_jet_flags.push_back(jet_flags[j] ? 1 : 0); // Convert jet flags to 1/0
+        output_jet_flags.push_back(jet_flags[j]); // Append the jet flags as is (0 or -1)
     }
 
-    // Return both event flag and jet flags
+    // Print jet flags for debugging
+    //std::cout << "Jet flags: ";
+    //for (const auto& flag : output_jet_flags) {
+    //    std::cout << flag << " ";
+    //}
+    //std::cout << std::endl;
+
+    // Return both event flag and jet flags as a tuple
     return std::make_tuple(output_event_flag, output_jet_flags);
 }
 """)
-
-
-
 
 # The skim function takes several parameters,
 # including the tree name (tn), input file (inf), output file (outf),
@@ -227,7 +276,7 @@ def skim(tn, inf, outf, particle, nevents, cfg):
     genjet_floatv = ["genjet_pt", "genjet_energy", "genjet_eta", "genjet_phi"]
     genjet_v= genjet_floatv
 
-    condgenjets = "genjet_pt >= 0"
+    condgenjets = "(genjet_eta > 1.7) && (genjet_eta < 2.8)"
     dd0 = dd.Define("tmp_good_genjets", condgenjets)
     for v in genjet_v:
         dd0 = dd0.Define("tmp_good_" + v, v + "[tmp_good_genjets]")
@@ -264,23 +313,24 @@ def skim(tn, inf, outf, particle, nevents, cfg):
     cl_v = cl_uintv + cl_floatv
 
     # selection on clusters (within each event)
-    condcl = "cl3d_eta > 0"
+    condcl = "cl3d_pt>= 0"
     dd1 = dd1.Define("tmp_good_cl", condcl)
     for v in cl_v:
         dd1 = dd1.Define("tmp_good_" + v, v + "[tmp_good_cl]")
 
     # remove events with zero clusters
-    dd2 = dd1.Filter("tmp_good_cl3d_id.size()!=0")
+    #dd2 = dd1.Filter("tmp_good_cl3d_id.size()!=0")
 
-
-    dd2 = dd2.Define("event_flag_jet_flags", 
+    dd2 = dd1.Define("event_flag_jet_flags", 
     "GetVBFEventFlags(tmp_good_gen_pdgid, tmp_good_gen_status, tmp_good_gen_daughters,tmp_good_gen_eta, tmp_good_gen_phi, tmp_good_genjet_eta, tmp_good_genjet_phi)")
 
     #Split the tuple into separate columns for event flag and jet flags
     matchvars = ["event_flag", "jet_flag"]
     dd2 = dd2.Define(matchvars[0], "convertInt(std::get<0>(event_flag_jet_flags))").Define(matchvars[1], "convertInt(std::get<1>(event_flag_jet_flags))")
-
+    dd2 = dd2.Filter("event_flag[0]>=0")
     print(dd2.GetColumnNames())
+
+    
 
     # convert root vector types to vector equivalents (uproot friendly)
     intv = tc_intv + ts_intv + gen_intv
@@ -310,7 +360,7 @@ def skim(tn, inf, outf, particle, nevents, cfg):
     allvars = tc_v + cl_v + ts_v + gen_v + genjet_v
     good_allvars = ["event"] + matchvars
     for v in allvars:
-        print("all vars", v)
+        #print("all vars", v)
         good_allvars.append("good_" + v)
     for v in good_allvars:
         print("GOOD all vars", v)
@@ -355,4 +405,4 @@ if __name__ == "__main__":
     else:
         infile = cfg["io"]["production"][FLAGS.particles]["infile"]
         outfile = cfg["io"]["production"][FLAGS.particles]["outfile"]
-    skim(dir_tree,"/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/production/VBFHToTauTau_M-125_TuneCP5_14TeV-powheg-pythia8_Phase2Spring23DIGIRECOMiniAOD.root" ,"/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/production/output_VBF.root" , FLAGS.particles, FLAGS.nevents, cfg)
+    skim(dir_tree,infile ,outfile, FLAGS.particles, FLAGS.nevents, cfg)

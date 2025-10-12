@@ -127,7 +127,8 @@ def skim(tn, inf, outf, particle, nevents, cfg):
 
 
     # selection on trigger cells (within each event)
-    condtc = "tc_mipPt > " + str(mipThreshold)
+    condtc = "tc_mipPt > 0"
+    # + str(mipThreshold)
     dd1 = dfilt.Define("tmp_good_tcs", condtc)
     for v in tc_v:
         dd1 = dd1.Define("tmp_good_" + v, v + "[tmp_good_tcs]")
