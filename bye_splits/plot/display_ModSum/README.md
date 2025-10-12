@@ -70,16 +70,16 @@ python mainModuleSums.py \
 * To be run on alma9 an el7  container is needed
   * Instructions to run the container:\
 
-    1) Launch the el7 container:\
+    1) Launch the el7 container:
     `/data_CMS/cms/manoniL1HGCAL/el7_container`\
-    This drops you into a Bash shell inside el7.\
+    This drops you into a Bash shell inside el7.
 
     2) Inside the container, run:\
     `source /cvmfs/cms.cern.ch/cmsset_default.sh`\
     `cd /home/llr/cms/manoni/CMSSW_12_5_2_patch1/src`\
-    `cmsenv`\
+    `cmsenv`
 
-You now have a proper el7 environment with CMSSW ready.
+    You now have a proper el7 environment with CMSSW ready.
 
 * PyPI packages (listed in `requirements.txt`):
 
@@ -90,7 +90,7 @@ You now have a proper el7 environment with CMSSW ready.
 ## 4  Repository Layout
 
 ```
-HGCalModuleSums/
+display_ModSum/
 ├── mainModuleSums.py          # Entry point
 ├── processingMS.py            # I/O + high‑level processing
 ├── resolutionMS.py            # Gen‑reco matching & resolution computation
