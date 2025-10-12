@@ -25,7 +25,31 @@ The script relies on helper modules (`processingMS`, `resolutionMS`, `geometryMS
 
 ---
 
-## 2  Quick Start
+## 2  Prerequisites
+
+* **Python ≥ 3.9**
+* Tested on `CMSSW_12_5_2_patch1`release
+* To be run on alma9 an el7  container is needed
+  * Instructions to run the container:\
+
+    1) Launch the el7 container:
+    `/data_CMS/cms/manoniL1HGCAL/el7_container`\
+    This drops you into a Bash shell inside el7.
+
+    2) Inside the container, run:\
+    `source /cvmfs/cms.cern.ch/cmsset_default.sh`\
+    `cd /home/llr/cms/manoni/CMSSW_12_5_2_patch1/src`\
+    `cmsenv`
+
+    You now have a proper el7 environment with CMSSW ready.
+
+* PyPI packages (listed in `requirements.txt`):
+
+  * pandas, numpy, uproot, awkward, shapely, geojson, matplotlib, tqdm, etc.
+
+---
+
+## 3  Quick Start
 
 ```bash
 # Example 1 – all photon events, 8‑tower algorithm
@@ -48,7 +72,7 @@ python mainModuleSums.py \
     --STCs
 ```
 
-### 2.1  CLI Arguments
+### 3.1  CLI Arguments
 
 | Flag                 | Default    | Description                                                                         |
 | -------------------- | ---------- | ----------------------------------------------------------------------------------- |
@@ -60,30 +84,6 @@ python mainModuleSums.py \
 | `--geom`             | `V16`      | CMSSW geometry tag: `V11` (2021) or `V16` (2023)                                    |
 | `--inputfile`        | `root`     | Input container: `root` or `hdf5` (hdf5 handling is outdated)                                                   |
 | `--STCs / --no-STCs` | *disabled* | Toggle Super Trigger Cells logic                                                |
-
----
-
-## 3  Prerequisites
-
-* **Python ≥ 3.9**
-* Tested on `CMSSW_12_5_2_patch1`release
-* To be run on alma9 an el7  container is needed
-  * Instructions to run the container:\
-
-    1) Launch the el7 container:
-    `/data_CMS/cms/manoniL1HGCAL/el7_container`\
-    This drops you into a Bash shell inside el7.
-
-    2) Inside the container, run:\
-    `source /cvmfs/cms.cern.ch/cmsset_default.sh`\
-    `cd /home/llr/cms/manoni/CMSSW_12_5_2_patch1/src`\
-    `cmsenv`
-
-    You now have a proper el7 environment with CMSSW ready.
-
-* PyPI packages (listed in `requirements.txt`):
-
-  * pandas, numpy, uproot, awkward, shapely, geojson, matplotlib, tqdm, etc.
 
 ---
 
