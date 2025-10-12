@@ -82,7 +82,7 @@ def main(subdet, event, particle, algo, n, geom, inputfile, STCs, PU200, root_fi
             root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples/MinBiasPU200_Fall22.root')
             if STCs:
                 print("Enabling STCs for MinBias samples...")
-                root_file =('/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/MinBias_STCs_Final/skimmed_ntuples/Ntuple_1.root')
+                root_file =('/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples_STCS/MinBias_PU200_STCs_ntuple1.root')
 
         elif geom == 'V16' and particle == 'jets':
             if root_file is not None:
@@ -92,7 +92,7 @@ def main(subdet, event, particle, algo, n, geom, inputfile, STCs, PU200, root_fi
                 root_file = '/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples_STCS/VBFHToInvisible_Spring23_PU200_100ntuples.root'
             else:
                 print("Enabling STCs for Jets samples PU0...")
-                root_file = '/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples/VBFHtoInvPU0_STCs_Ntuple12.root'
+                root_file = '/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples_STCS/VBFHtoInvPU0_STCs_Ntuple12.root'
     else:
         print(f"Using provided ROOT file: {root_file}")
 
