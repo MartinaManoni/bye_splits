@@ -50,7 +50,7 @@ def compute_and_plot_jet_based_rates(file_path):
 
     # Plot the rates with error bars
     plt.style.use(mplhep.style.CMS)
-    mplhep.cms.label('Private work', data=True, rlabel='Minimum bias')
+    mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Minimum bias')
     plt.errorbar(
         pt_thresholds[:-1],  # Exclude last point for x-axis
         rates,          # Exclude last point for y-axis (rates)
@@ -106,7 +106,7 @@ def compute_and_plot_event_based_rates(file_path, scaling_factor=2340 * 11.245):
     
     # Plot the rates with error bars
     plt.style.use(mplhep.style.CMS)
-    mplhep.cms.label('Private work', data=True, rlabel='Minimum bias')
+    mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Minimum bias')
     
     plt.errorbar(
         pt_thresholds[:-1],  # Exclude last point for x-axis
@@ -131,5 +131,5 @@ def compute_and_plot_event_based_rates(file_path, scaling_factor=2340 * 11.245):
 
 
 # Execute the function
-compute_and_plot_jet_based_rates('area_overlap_neutrinos_-1_5_results_newgeom.txt')
-compute_and_plot_event_based_rates('area_overlap_neutrinos_-1_5_results_newgeom.txt')
+compute_and_plot_jet_based_rates('area_overlap_neutrinos_-1_5_results_2Ntuples.txt')
+compute_and_plot_event_based_rates('area_overlap_neutrinos_-1_5_results_2Ntuples.txt')

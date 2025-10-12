@@ -10,10 +10,10 @@ import os
 
 # Argument parser for customization
 parser = argparse.ArgumentParser(description="Generate analysis plots with custom settings.")
-parser.add_argument("--algo", type=str, default="8towers", help="Algorithm used (e.g., baseline, area_overlap..).")
-parser.add_argument("--subdet", type=str, default="CEE_CEH", help="Subdetector type (e.g., 1,2,3 ...")
+parser.add_argument("--algo", type=str, default="16towers_pions_-1_5_PIONS_results", help="Algorithm used (e.g., baseline, area_overlap..).")
+parser.add_argument("--subdet", type=str, default="CEE_Mod_CEH_STC", help="Subdetector type (e.g., 1,2,3 ...")
 parser.add_argument("--events", type=str, default="4k", help="Event description (e.g., 1k, 2k...")
-parser.add_argument("--particle", type=str, default="Jets", help="Event description (e.g., 1k, 2k...")
+parser.add_argument("--particle", type=str, default="Pions_PROVA_SPLIT_ETA", help="Event description (e.g., 1k, 2k...")
 args = parser.parse_args()
 
 # Create output directory dynamically
@@ -34,8 +34,8 @@ use_fit = False  # Set to False to use the raw mean and std from the data
 use_eff_rms = True  # Set to True to use the eff_rms method
 
 # Load the data from the file and read the header
-data = []
-with open('8towers_jets_-1_5_PIONS_results.txt', 'r') as f: #matched_filtered_reordered_results.txt
+data = [] #4towers_jets_-1_5_PIONS_results #merged_Jets_16towers.txt #16towers_jets_-1_5_results.txt
+with open('16towers_pions_-1_5_PIONS_results.txt', 'r') as f: #matched_filtered_reordered_results.txt
     # Read the header line
     header = f.readline().strip().split(',')
     print("Header:", header)  # Optional: Print the header to check if it's correct
@@ -97,7 +97,7 @@ def plot_scatter(x, y, xlabel, ylabel, title, filename, xlims=None, ylims=None):
     if ylims:
         plt.ylim(ylims)
     plt.grid(alpha=0.5)
-    mplhep.cms.label('Private work', data=True, rlabel=f'{args.particle} PU0')
+    mplhep.cms.label('Preliminary', rlabel="",fontsize=15)
     plt.legend()
     plt.savefig(filename)
     plt.close()
@@ -133,6 +133,7 @@ plot_scatter(
     'Gen vs Reco Phi (All Events)',
     f'{output_dir}/gen_vs_reco_phi_all_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png'
 )
+
 
 # Gen vs Reco Phi (Matched)
 plot_scatter(
@@ -177,6 +178,30 @@ plot_scatter(
     xlims=(0, 200), ylims=(0, 200)
 )
 
+# Gen Eta vs Eta Diff (All Events)
+plot_scatter(
+    gen_etas, eta_diffs,
+    r'$\eta^{gen}$', r'$\eta^{diff}$',
+    'Gen Eta vs Eta Diff (All Events)',
+    f'{output_dir}/GenEta_vs_Etadiff_all_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png'
+)
+
+# Gen Eta vs Eta Diff (matched)
+plot_scatter(
+    gen_etas[matched], eta_diffs[matched],
+    r'$\eta^{gen}$', r'$\eta^{diff}$',
+    'Gen Eta vs Eta Diff (Matched)',
+    f'{output_dir}/GenEta_vs_Etadiff_matched_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png'
+)
+
+
+# Gen Eta vs Eta Diff (matched)
+plot_scatter(
+    gen_etas[non_matched], eta_diffs[non_matched],
+    r'$\eta^{gen}$', r'$\eta^{diff}$',
+    'Gen Eta vs Eta Diff (Matched)',
+    f'{output_dir}/GenEta_vs_Etadiff_non_matched_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png'
+)
 
 mask = matched
 events = events[mask]
@@ -202,7 +227,7 @@ plt.title('Distribution of Gen-Level Transverse Momentum ($p_{T}^{gen}$)', fonts
 
 # Add grid and style
 plt.grid(alpha=0.5)
-mplhep.cms.label('Private work', data=True, rlabel=f'{args.particle} PU0')
+mplhep.cms.label('Preliminary', rlabel="", fontsize=15)
 
 # Save and display the plot
 #plt.savefig('gen_pt_distribution.png')
@@ -266,7 +291,7 @@ for i in range(len(bin_edges) - 1):
 
     plt.title(f'{"Fit" if use_fit else "Raw"} for pt bin {i + 1}: ({bin_edges[i]:.2f}, {bin_edges[i + 1]:.2f})')
     plt.xlabel('pt_ratio')
-    plt.ylabel('Density')
+    plt.ylabel('a.u')
     plt.close()
 
 #################
@@ -292,8 +317,18 @@ plt.errorbar(
 plt.xticks(np.arange(0, 220, 50))
 plt.xlabel(r'$p_{T}^{gen} [GeV]$')
 plt.ylabel(r'$\sigma/\mu$')
-mplhep.cms.label('Private work', data=True, rlabel=f'{args.particle} PU0')
+mplhep.cms.label('Preliminary', rlabel="", fontsize=15)
 plt.grid(True)
+
+# Add bold text at top right
+plt.text(
+    0.90, 0.90,   # x=95% from left, y=5% from bottom
+    f'{args.particle} PU = 0',
+    transform=plt.gca().transAxes,
+    fontsize=20, fontweight='bold',
+    ha='right', va='top'
+)
+
 plt.savefig(f'{output_dir}/scale_plot_{args.particle}_{args.algo}_{args.subdet}_{args.events}.pdf')
 plt.savefig(f'{output_dir}/scale_plot_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png')
 plt.close()
@@ -317,13 +352,23 @@ plt.hist(pt_ratios, bins=50, density=True, alpha=0.6, color='#4682B4')
 plt.axvline(mean_pt_ratio, color='red', linestyle='--', linewidth=1, label=f'Mean: {mean_pt_ratio:.2f}')
 plt.axvline(mean_pt_ratio - std_pt_ratio, color='green', linestyle='--', linewidth=1, label=f'-1σ: {mean_pt_ratio - std_pt_ratio:.2f}')
 plt.axvline(mean_pt_ratio + std_pt_ratio, color='green', linestyle='--', linewidth=1, label=f'+1σ: {mean_pt_ratio + std_pt_ratio:.2f}')
+plt.xlim(0, 1.7)
 
 # Set plot labels and title
 plt.xlabel(r'$p_{T}^{reco} / p_{T}^{gen} $')
-plt.ylabel('Density')
-mplhep.cms.label('Private work', data=True, rlabel=f'{args.particle} PU0')
+plt.ylabel('a.u')
+mplhep.cms.label('Preliminary', rlabel="", fontsize=15)
 plt.legend()
 plt.grid(True)
+
+# Add bold text at top right
+plt.text(
+    0.95, 0.70,   # x=95% from left, y=5% from bottom
+    f'{args.particle} PU = 0',
+    transform=plt.gca().transAxes,
+    fontsize=20, fontweight='bold',
+    ha='right', va='top'
+)
 
 # Save the new plot as a PDF
 plt.savefig(f'{output_dir}/pt_ratio_{args.particle}_{args.algo}_{args.subdet}_{args.events}.pdf')
@@ -342,8 +387,29 @@ eta_phi_diff_data = np.column_stack((filtered_eta_diffs, filtered_phi_diffs))
 # Save to a new text file
 output_file = f'{output_dir}/filtered_eta_phi_diffs_{args.particle}_{args.algo}_{args.subdet}_{args.events}.txt'
 np.savetxt(output_file, eta_phi_diff_data, fmt='%.8f', delimiter=',', header='eta_diff,phi_diff', comments='')
-
 print(f"Filtered eta_diff and phi_diff data saved to {output_file}")
+
+
+# File for gen_eta > 2.4
+mask_eta_high = gen_etas > 2.4
+filtered_eta_diffs_high = filtered_eta_diffs[mask_eta_high]
+filtered_phi_diffs_high = filtered_phi_diffs[mask_eta_high]
+
+eta_phi_diff_data_high = np.column_stack((filtered_eta_diffs_high, filtered_phi_diffs_high))
+output_file_high = f'{output_dir}/filtered_eta_phi_diffs_etaGT2p4_{args.particle}_{args.algo}_{args.subdet}_{args.events}.txt'
+np.savetxt(output_file_high, eta_phi_diff_data_high, fmt='%.8f', delimiter=',', header='eta_diff,phi_diff', comments='')
+print(f"Filtered eta_diff and phi_diff data with gen_eta > 2.4 saved to {output_file_high}")
+
+
+# File for gen_eta < 2.0
+mask_eta_low = gen_etas < 2.0
+filtered_eta_diffs_low = filtered_eta_diffs[mask_eta_low]
+filtered_phi_diffs_low = filtered_phi_diffs[mask_eta_low]
+
+eta_phi_diff_data_low = np.column_stack((filtered_eta_diffs_low, filtered_phi_diffs_low))
+output_file_low = f'{output_dir}/filtered_eta_phi_diffs_etaLT2p0_{args.particle}_{args.algo}_{args.subdet}_{args.events}.txt'
+np.savetxt(output_file_low, eta_phi_diff_data_low, fmt='%.8f', delimiter=',', header='eta_diff,phi_diff', comments='')
+print(f"Filtered eta_diff and phi_diff data with gen_eta < 2.0 saved to {output_file_low}")
 
 
 #########################################
@@ -401,14 +467,23 @@ plt.errorbar(pt_bin_centers, percentage_matched,
 
 # Add labels and title
 plt.xlabel(r'$p_{T}^{gen} \, [GeV]$', fontsize=14)
-plt.ylabel('Percentage of Matched Jets (%)', fontsize=14)
+plt.ylabel('Percentage of Matched Pions (%)', fontsize=14)
 
 # Add grid and style
 plt.grid(alpha=0.5)
-mplhep.cms.label('Private work', data=True, rlabel=f'{args.particle} PU0')
+mplhep.cms.label('Preliminary', rlabel="", fontsize=15)
 
 # Add legend
 plt.legend()
+
+# Add bold text at top right
+plt.text(
+    0.90, 0.25,   # x=95% from left, y=5% from bottom
+    f'{args.particle} PU = 0',
+    transform=plt.gca().transAxes,
+    fontsize=20, fontweight='bold',
+    ha='right', va='bottom'
+)
 
 # Save and display the plot
 plt.savefig(f'{output_dir}/matched_percentage_pt_bins_with_errors_{args.particle}_{args.algo}_{args.subdet}_{args.events}.png')

@@ -7,13 +7,13 @@ import argparse
 
 # Argument parser for customization
 parser = argparse.ArgumentParser(description="Generate analysis plots with custom settings.")
-parser.add_argument("--algo", type=str, default="16towers", help="Algorithm used (e.g., 16t, DNN).")
+parser.add_argument("--algo", type=str, default="4towers", help="Algorithm used (e.g., 16t, DNN).")
 parser.add_argument("--subdet", type=str, default="CEE_CEH", help="Subdetector type (e.g., Jets, Calorimeter).")
-parser.add_argument("--events", type=str, default="5k", help="Events")
+parser.add_argument("--events", type=str, default="4k", help="Events")
 args = parser.parse_args()
 
 # Directory to save all plots
-output_dir = f"plots_PHOTONS_NEW_SUBWIND_{args.algo}_{args.subdet}_{args.events}"
+output_dir = f"plots_photons_{args.algo}_{args.subdet}_{args.events}"
 os.makedirs(output_dir, exist_ok=True)
 
 
@@ -32,7 +32,7 @@ use_eff_rms = True  # Set to True to use the eff_rms method
 
 # Load the data from the file and read the header
 data = []
-with open('pt_scale_&_res_8towers_5.txt', 'r') as f:
+with open('pt_scale_&_res_4towers_5.txt', 'r') as f:
     # Read the header line
     header = f.readline().strip().split(', ')
     print("Header:", header)  # Optional: Print the header to check if it's correct
@@ -58,11 +58,6 @@ with open('pt_scale_&_res_8towers_5.txt', 'r') as f:
             print("line boh")
 # Convert the data into a numpy array for easier processing
 data = np.array(data)
-
-# Filter out events where pt_ratio > 2 or pt_ratio < -2
-#pt_ratios = data[:, 2]
-#mask = (pt_ratios < 2)
-#data = data[mask]
 
 
 # Extract the genpart_pt and pt_ratio columns
@@ -172,7 +167,7 @@ plt.errorbar(
 plt.xticks(np.arange(0, 220, 50))
 plt.xlabel(r'$p_{T}^{gen} [GeV]$')
 plt.ylabel(r'$\sigma/\mu$')
-mplhep.cms.label('Private work', data=True, rlabel='Photons PU0')
+mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Photons PU0')
 plt.grid(True)
 plt.savefig(os.path.join(output_dir,f'scale_{args.algo}_{args.subdet}_{args.events}.pdf'))
 plt.savefig(os.path.join(output_dir,f'scale_{args.algo}_{args.subdet}_{args.events}.png'))
@@ -206,7 +201,7 @@ plt.axvline(mean_pt_ratio + std_pt_ratio, color='green', linestyle='--', linewid
 # Set plot labels and title
 plt.xlabel(r'$p_{T}^{reco} / p_{T}^{gen} $')
 plt.ylabel('Density')
-mplhep.cms.label('Private work', data=True, rlabel='Photons PU0')
+mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Photons PU0')
 plt.legend()
 plt.grid(True)
 
@@ -232,7 +227,7 @@ plt.hist(filtered_particle_etas, bins=50, density=False, alpha=0.6, color='#4682
 # Set plot labels and title
 plt.xlabel(r'$\eta$') #(for $p_{T}^{reco} / p_{T}^{gen} < 0.5$)
 plt.ylabel('Counts')
-mplhep.cms.label('Private work', data=True, rlabel='Photons PU0')
+mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Photons PU0')
 plt.legend()
 plt.grid(True)
 
@@ -258,7 +253,7 @@ plt.hist(filtered_particle_phis, bins=50, density=False, alpha=0.6, color='#4682
 # Set plot labels and title
 plt.xlabel(r'$\phi$ ') #(for $p_{T}^{reco} / p_{T}^{gen} < 0.5$)
 plt.ylabel('Counts')
-mplhep.cms.label('Private work', data=True, rlabel='Photons PU0')
+mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Photons PU0')
 plt.legend()
 plt.grid(True)
 
@@ -280,7 +275,7 @@ plt.hist(genpart_pts, bins=50, density=False, alpha=0.6, color='#4682B4')
 # Set plot labels and title
 plt.xlabel(r'$p_{T}$') #(for $p_{T}^{reco} / p_{T}^{gen} < 0.5$)
 plt.ylabel('Counts')
-mplhep.cms.label('Private work', data=True, rlabel='Photons PU0')
+mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Photons PU0')
 plt.legend()
 plt.grid(True)
 
@@ -303,7 +298,7 @@ plt.scatter(particle_etas, particle_phis, alpha=0.6, color='#4682B4', s=10, edge
 # Set plot labels and title
 plt.xlabel(r'$\eta$ ') #(for $p_{T}^{reco} / p_{T}^{gen} < 0.5$)
 plt.ylabel(r'$\phi$ ') #(for $p_{T}^{reco} / p_{T}^{gen} < 0.5$)
-mplhep.cms.label('Private work', data=True, rlabel='Photons PU0')
+mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Photons PU0')
 plt.grid(True)
 
 # Save the scatter plot as a PDF and PNG
@@ -325,12 +320,33 @@ plt.scatter(particle_phis, phi_diffs, alpha=0.6, color='#4682B4', s=10, edgecolo
 # Set plot labels and title
 plt.xlabel(r'$\phi gen$')
 plt.ylabel(r'$\Delta \phi$ ')
-mplhep.cms.label('Private work', data=True, rlabel='Photons PU0')
+mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Photons PU0')
 plt.grid(True)
 
 # Save the scatter plot as a PDF and PNG
 plt.savefig(os.path.join(output_dir,f'phi_phi_diff_correlation_plot_pt_ratio_{args.algo}_{args.subdet}_{args.events}.pdf'))
 plt.savefig(os.path.join(output_dir,f'phi_phi_diff_correlation_plot_pt_ratio_{args.algo}_{args.subdet}_{args.events}.png'))
+plt.close()
+
+##############################################
+## CORRELATION PLOT: ETA vs ETA_DIFF       ##
+##############################################
+
+# Create a scatter plot for filtered genpart_pt vs phi_diff
+plt.figure(figsize=(12, 8))
+
+# Plot a scatter plot
+plt.scatter(particle_etas, eta_diffs, alpha=0.6, color='#4682B4', s=10, edgecolor='k')
+
+# Set plot labels and title
+plt.xlabel(r'$\eta gen$')
+plt.ylabel(r'$\Delta \eta$ ')
+mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Photons PU0')
+plt.grid(True)
+
+# Save the scatter plot as a PDF and PNG
+plt.savefig(os.path.join(output_dir,f'eta_eta_diff_correlation_plot_pt_ratio_{args.algo}_{args.subdet}_{args.events}.pdf'))
+plt.savefig(os.path.join(output_dir,f'eta_eta_diff_correlation_plot_pt_ratio_{args.algo}_{args.subdet}_{args.events}.png'))
 plt.close()
 
 
@@ -347,7 +363,7 @@ plt.scatter(particle_phis, reco_phis, alpha=0.6, color='#4682B4', s=10, edgecolo
 # Set plot labels and title
 plt.xlabel(r'$\phi gen')
 plt.ylabel(r'$\phi$ reco ')
-mplhep.cms.label('Private work', data=True, rlabel='Photons PU0')
+mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Photons PU0')
 plt.grid(True)
 
 # Save the scatter plot as a PDF and PNG
@@ -368,7 +384,7 @@ plt.scatter(particle_etas, reco_etas, alpha=0.6, color='#4682B4', s=10, edgecolo
 # Set plot labels and title
 plt.xlabel(r'$\eta$ gen')
 plt.ylabel(r'$\eta$ reco ')
-mplhep.cms.label('Private work', data=True, rlabel='Photons PU0')
+mplhep.cms.label('Simulation Preliminary', data=True, rlabel='Photons PU0')
 plt.grid(True)
 
 # Save the scatter plot as a PDF and PNG
