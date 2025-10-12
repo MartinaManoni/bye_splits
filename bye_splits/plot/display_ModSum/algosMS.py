@@ -18,7 +18,10 @@ class Algorithms():
         pass
 
     def baseline_by_event(self, df_hexagon_info, subdet):
+        print("df_hexagon_info", df_hexagon_info.columns)
         print("Baseline algorithm ...")
+        #print("df_hexagon_info hex x ", df_hexagon_info['hex_x'])
+        #print("df_hexagon_info hex y", df_hexagon_info['hex_y'])
         start_time = time.time()
         
         # Initialize a list to store the results for all events
@@ -99,6 +102,8 @@ class Algorithms():
                         'layer': layer_idx,
                         'eta_vertices': bin_key[0],
                         'phi_vertices': bin_key[1],
+                        #'hex_x': hex_row.hex_x,
+                        #'hex_y': hex_row.hex_y,
                         'pt': pt
                     }
                     event_rows.append(row)
@@ -114,7 +119,6 @@ class Algorithms():
         # Group by eta_vertices and phi_vertices and sum the pt
         df_baseline = df_baseline.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'pt': 'sum'}).reset_index()
 
-        #print("df_baseline", df_baseline)
         return df_baseline
 
 
@@ -181,6 +185,8 @@ class Algorithms():
 
 
     def splitted_MS_Towers_by_event(self, df_hexagon_info, num_towers = 8):
+        #print("df_hexagon_info in splitted_MS_Towers_by_event", df_hexagon_info)
+        #print("df_hexagon_info columns", df_hexagon_info.columns)
         print(f"Splitting Mod Sums into {num_towers} towers ...")
         start_time = time.time()
 
@@ -258,11 +264,9 @@ class Algorithms():
         # Group by event, eta_vertices, and phi_vertices and sum the pt
         df_over_final = flattened_bins_df.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'pt': 'sum'}).reset_index()
 
-        total_pt = df_over_final['pt'].sum()
-
-        print("Execution time loop:", end_time - start_time)
-
         return df_over_final
+
+
 
     # Function to load bin geometry from a JSON file
     def load_bins_from_json(bins_json_path):
@@ -346,3 +350,263 @@ class Algorithms():
 
         # Return the final DataFrame with summed pt values
         return df_baseline
+
+
+    '''
+    def baseline_by_event(self, df_hexagon_info, subdet):
+        print("df_hexagon_info", df_hexagon_info.columns)
+        print("df_hexagon_info hex x ", df_hexagon_info['hex_x'])
+        print("df_hexagon_info hex y", df_hexagon_info['hex_y'])
+
+        print("Baseline algorithm NEW ...")
+        start_time = time.time()
+
+        all_event_rows = []
+        unique_events = df_hexagon_info.index.get_level_values('event').unique()
+
+        for event in unique_events:
+            df_event = df_hexagon_info.loc[event]
+            bin_pt_by_layer = {}
+            unique_layers = df_event.index.get_level_values('layer').unique()
+
+            for layer_idx in unique_layers:
+                layer_df = df_event.loc[df_event.index.get_level_values('layer') == layer_idx]
+                bin_pt = {}
+
+                for hex_row in layer_df.itertuples():
+                    if not hex_row.bins_overlapping:
+                        continue
+
+                    # hexagon centroid
+                    hex_centroid = np.array([hex_row.hex_eta_centroid, hex_row.hex_phi_centroid])
+                    bin_centroids = []
+                    bin_pts = []
+
+                    for bin_info in hex_row.bins_overlapping:
+                        bin_centroid = np.array([bin_info['centroid_eta'], bin_info['centroid_phi']])
+                        bin_centroids.append(bin_centroid)
+                        bin_pts.append(hex_row.ts_pt)
+
+                    distances = np.linalg.norm(np.array(bin_centroids) - hex_centroid, axis=1)
+                    nearest_bin_idx = np.argmin(distances)
+                    nearest_bin_info = hex_row.bins_overlapping[nearest_bin_idx]
+
+                    bin_key = (tuple(nearest_bin_info['eta_vertices']),
+                            tuple(nearest_bin_info['phi_vertices']))
+
+                    if bin_key not in bin_pt:
+                        bin_pt[bin_key] = {
+                            'pt': 0,
+                            'hex_x': hex_row.hex_x,
+                            'hex_y': hex_row.hex_y
+                        }
+
+                    bin_pt[bin_key]['pt'] += bin_pts[nearest_bin_idx]
+
+                bin_pt_by_layer[layer_idx] = bin_pt
+
+            # Flatten into event rows
+            for layer_idx, pt_dict in bin_pt_by_layer.items():
+                for bin_key, data in pt_dict.items():
+                    row = {
+                        'event': event,
+                        'layer': layer_idx,
+                        'eta_vertices': bin_key[0],
+                        'phi_vertices': bin_key[1],
+                        'hex_x': data['hex_x'],
+                        'hex_y': data['hex_y'],
+                        'pt': data['pt']
+                    }
+                    all_event_rows.append(row)
+
+        # -----------------------
+        # Build DataFrames
+        # -----------------------
+        flattened_bins_df = pd.DataFrame(
+            all_event_rows,
+            columns=['event','layer','eta_vertices','phi_vertices','hex_x','hex_y','pt']
+        )
+
+        # Combine bins with same eta/phi
+        df_over_final = (
+            flattened_bins_df
+            .groupby(['event','eta_vertices','phi_vertices'])
+            .agg({'pt': 'sum'})
+            .reset_index()
+        )
+
+        # -----------------------
+        # Compute extents
+        # -----------------------
+        df_bins = flattened_bins_df[flattened_bins_df['pt'] > 0].copy()
+        print("df_bins y", df_bins['hex_y'])
+        print("df_bins x", df_bins['hex_x'])
+
+        # Make unique ID from hex_x and hex_y lists
+        df_bins['hex_id'] = pd.factorize(
+            list(zip(df_bins['hex_x'].apply(tuple), df_bins['hex_y'].apply(tuple)))
+        )[0]
+
+        df_bins['eta_min_bin'] = df_bins['eta_vertices'].apply(lambda v: min(v))
+        df_bins['eta_max_bin'] = df_bins['eta_vertices'].apply(lambda v: max(v))
+
+        extent_df = (
+            df_bins.groupby(['event','layer','hex_id'])
+            .agg(
+                eta_min=('eta_min_bin','min'),
+                eta_max=('eta_max_bin','max'),
+                phi_lists=('phi_vertices', list),
+                total_pt=('pt','sum')
+            )
+            .reset_index()
+        )
+
+        extent_df['eta_extent'] = extent_df['eta_max'] - extent_df['eta_min']
+
+        def circular_phi_extent(phi_lists):
+            phis = np.array([v for phi_list in phi_lists for v in phi_list])
+            phis_mod = np.mod(phis, 2*np.pi)
+            phis_sorted = np.sort(phis_mod)
+            diffs = np.diff(np.concatenate([phis_sorted, [phis_sorted[0]+2*np.pi]]))
+            max_gap = np.max(diffs)
+            return 2*np.pi - max_gap
+
+        extent_df['phi_extent'] = extent_df['phi_lists'].apply(circular_phi_extent)
+        extent_df = extent_df.drop(columns=['phi_lists'])
+
+        print("Done in", time.time()-start_time, "seconds")
+        print("extent_df", extent_df)
+
+        return df_over_final, extent_df
+        '''
+
+    '''
+    def splitted_MS_Towers_by_event_new(self, df_hexagon_info, num_towers=8):
+        import time
+        import pandas as pd
+
+        print(f"Splitting Mod Sums into {num_towers} towers ...")
+        start_time = time.time()
+
+        all_event_results = []
+
+        # Iterate over each event
+        for event in df_hexagon_info.index.get_level_values('event').unique():
+            df_event = df_hexagon_info.loc[event]
+
+            # Iterate over layers
+            for layer_idx in df_event.index.get_level_values('layer').unique():
+                layer_df = df_event[df_event.index.get_level_values('layer') == layer_idx]
+
+                # Iterate over hexagons
+                for _, row in layer_df.iterrows():
+                    hex_x = row['hex_x']
+                    hex_y = row['hex_y']
+
+                    # Reset and tag bins
+                    for bin_info in row['bins_overlapping']:
+                        bin_info['pt'] = 0.0
+                        bin_info['event'] = event
+                        bin_info['layer'] = layer_idx
+                        bin_info['hex_x'] = hex_x
+                        bin_info['hex_y'] = hex_y
+
+                    total_pt = row['ts_pt']
+
+                    # Distribute pt over overlapping bins
+                    filtered_bins = [b for b in row['bins_overlapping'] if b['percentage_overlap'] > 0]
+                    sorted_bins = sorted(filtered_bins, key=lambda x: x['percentage_overlap'], reverse=True)
+
+                    remaining_pt = total_pt
+                    top_bins = sorted_bins[:num_towers] if len(sorted_bins) > num_towers else sorted_bins
+                    for b in top_bins:
+                        percent = round(b['percentage_overlap'] * num_towers)
+                        percent = max(1, percent)
+                        pt_fraction = percent / num_towers
+                        pt_assigned = min(remaining_pt, pt_fraction * total_pt)
+                        b['pt'] = pt_assigned
+                        remaining_pt -= pt_assigned
+                        if remaining_pt <= 0:
+                            break
+
+                    all_event_results.extend(row['bins_overlapping'])
+
+        print("Execution time loop:", time.time() - start_time)
+
+        # Flatten into DataFrame
+        flattened_bins = []
+        for b in all_event_results:
+            flattened_bins.append({
+                'event': b['event'],
+                'layer': b['layer'],
+                'hex_x': b['hex_x'],
+                'hex_y': b['hex_y'],
+                'eta_vertices': tuple(b['eta_vertices']),
+                'phi_vertices': tuple(b['phi_vertices']),
+                'pt': b['pt']
+            })
+
+        flattened_bins_df = pd.DataFrame(flattened_bins)
+
+        # ----- df_over_final (as before) -----
+        df_over_final = (
+            flattened_bins_df
+            .groupby(['event', 'eta_vertices', 'phi_vertices'])
+            .agg({'pt': 'sum'})
+            .reset_index()
+        )
+
+        print("df_over_final", df_over_final)
+
+        # ----- extent_df (new) -----
+        df_bins = flattened_bins_df[flattened_bins_df['pt'] > 0].copy()
+
+        # Create a unique identifier for each hexagon based on hex_x and hex_y
+        df_bins['hex_id'] = pd.factorize(
+            list(zip(df_bins['hex_x'].apply(tuple), df_bins['hex_y'].apply(tuple)))
+        )[0]
+
+        print("df_bins['hex_id']", df_bins['hex_id'])
+
+        # Compute min and max directly from vertices for eta
+        df_bins['eta_min_bin'] = df_bins['eta_vertices'].apply(lambda v: min(v))
+        df_bins['eta_max_bin'] = df_bins['eta_vertices'].apply(lambda v: max(v))
+
+        # Group by event, layer, hex_id
+        extent_df = (
+            df_bins.groupby(['event','layer','hex_id'])
+            .agg(
+                eta_min=('eta_min_bin','min'),
+                eta_max=('eta_max_bin','max'),
+                phi_lists=('phi_vertices', list),  # keep all phi vertex lists for circular handling
+                total_pt=('pt','sum')
+            )
+            .reset_index()
+        )
+
+        # Compute linear eta extent
+        extent_df['eta_extent'] = extent_df['eta_max'] - extent_df['eta_min']
+
+        # --- Compute circular phi extent ---
+        def circular_phi_extent(phi_lists):
+            # Flatten all phi values
+            phis = np.array([v for phi_list in phi_lists for v in phi_list])
+            phis_mod = np.mod(phis, 2*np.pi)  # ensure in [0, 2*pi)
+            phis_sorted = np.sort(phis_mod)
+            # differences between consecutive sorted phis, with wrap-around
+            diffs = np.diff(np.concatenate([phis_sorted, [phis_sorted[0]+2*np.pi]]))
+            max_gap = np.max(diffs)
+            return 2*np.pi - max_gap
+
+        extent_df['phi_extent'] = extent_df['phi_lists'].apply(circular_phi_extent)
+
+        # Drop the temporary column
+        extent_df = extent_df.drop(columns=['phi_lists'])
+
+        print("Done in", time.time()-start_time, "seconds")
+        print("extent_df", extent_df)
+        print("df_over_final", df_over_final)
+
+
+        return df_over_final, extent_df
+        '''

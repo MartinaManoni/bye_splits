@@ -31,6 +31,9 @@ from collections import defaultdict
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import PowerNorm
+import mplhep
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import processingMS
 #matplotlib.use("TkAgg")
@@ -382,14 +385,15 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
         for j in range(len(phi_bins) - 1):
             eta_vertices = [eta_bins[i], eta_bins[i + 1], eta_bins[i + 1], eta_bins[i]]
             phi_vertices = [phi_bins[j], phi_bins[j], phi_bins[j + 1], phi_bins[j + 1]]
-            poly = PolygonPlt(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')#, closed=True
-            color = ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap='viridis').to_rgba(0)
+            poly = PolygonPlt(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='gray')#, closed=True
+            color = ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap='Blues').to_rgba(0)
             poly.set_facecolor(color)
             #ax.add_patch(poly)
 
     # Normalize total pt values for color mapping
     max_pt = df_baseline_proj['pt'].max()
-    norm = Normalize(vmin=0, vmax=max_pt)
+    norm = PowerNorm(gamma=0.5, vmin=0, vmax=max_pt)
+    #norm = Normalize(vmin=0, vmax=max_pt)
 
     # Plotting bins with colors and annotations
     for _, row in df_baseline_proj.iterrows():
@@ -399,27 +403,21 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
         pt = row['pt']
 
         bin_key = (eta_vertices, phi_vertices)
-        color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(pt)
+        color = ScalarMappable(norm=norm, cmap='Blues').to_rgba(pt)
 
-        poly = PolygonPlt(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='black')#closed=True
+        poly = PolygonPlt(np.column_stack((eta_vertices, phi_vertices)), closed=True, edgecolor='gray')#closed=True
         ax.add_patch(poly)
         poly.set_facecolor(color)
 
-        text_x = np.mean(eta_vertices)
-        text_y = np.mean(phi_vertices)
-        ax.text(text_x, text_y, f'{pt:.1f}', color='black', ha='center', va='center', fontsize=5)
+        #text_x = np.mean(eta_vertices)
+        #text_y = np.mean(phi_vertices)
+        #ax.text(text_x, text_y, f'{pt:.1f}', color='black', ha='center', va='center', fontsize=5)
+
         #ax.text(data_gen['gen_eta'], data_gen['gen_phi'], f'.', color='red', ha='center', va='center', fontsize=5)
         #plt.scatter(data_gen['gen_eta'], data_gen['gen_phi'], marker='o', color='red')
     # Plot gen data points (handle multiple points if data_gen has more than one row)
     # Check if data_gen is not None
 
-    if data_gen is not None and len(data_gen) > 0:
-        # Handle multiple points if data_gen has more than one row
-        if len(data_gen) > 1:
-            for idx, row in data_gen.iterrows():
-                ax.text(row['gen_eta'], row['gen_phi'], '.', color='red', ha='center', va='center', fontsize=8)
-        else:
-            ax.text(data_gen['gen_eta'].values[0], data_gen['gen_phi'].values[0], '.', color='red', ha='center', va='center', fontsize=8)
 
     if particle == "pions" or particle == "jets" :
         # Plot jets as circles based on results_df
@@ -430,17 +428,22 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
             print("jet_phi", jet_phi)
             #jet_radius = 0.4  # This is the jet radius (Anti-kt algorithm radius)
 
+            # Create a circle for each jet - FOR MATCHING
+            circle0 = Circle((jet_eta, jet_phi), 0.1 , color='green', fill=False, linewidth=2, label=r'Anti-kt $\Delta R = 0.1$' )
+            ax.add_patch(circle0)
+
+            #ax.legend(fontsize=20)
+
             # Create a circle for each jet
-            circle = Circle((jet_eta, jet_phi), 0.4 , color='red', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.4$')
+            circle = Circle((jet_eta, jet_phi), 0.4 , color='red', fill=False, linewidth=2, label=r'Anti-kt $\Delta R = 0.4$')
             ax.add_patch(circle)
             
             # Create a circle for each jet
-            circle2 = Circle((jet_eta, jet_phi), 0.8 , color='blue', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.8$' )
-            ax.add_patch(circle2)
+            #circle2 = Circle((jet_eta, jet_phi), 0.8 , color='blue', fill=False, linewidth=2, label=r'Anti-kt $\Delta R = 0.8$' )
+            #ax.add_patch(circle2)
 
-            # Create a circle for each jet - FOR MATCHING
-            circle2 = Circle((jet_eta, jet_phi), 0.1 , color='green', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.1$' )
-            ax.add_patch(circle2)
+            #ax.legend(fontsize=70)
+
 
     if particle == "neutrinos":
         # Plot jets as circles based on results_df
@@ -455,28 +458,66 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
             circle = Circle((jet_eta, jet_phi), 0.4 , color='red', fill=False, linewidth=2, label=r'Jet (Anti-kt), $\Delta R = 0.4$')
             ax.add_patch(circle)
 
+    if data_gen is not None and len(data_gen) > 0:
+        # Handle multiple points if data_gen has more than one row
+        # Handle multiple points if data_gen has more than one row
+        if len(data_gen) > 1:
+            for idx, row in data_gen.iterrows():
+                ax.scatter(row['gen_eta'], row['gen_phi'],
+                        marker='x', color='red', s=100, linewidths=2, zorder=5)
+        else:
+            ax.scatter(data_gen['gen_eta'].values[0], data_gen['gen_phi'].values[0],
+                    marker='x', color='red', s=100, linewidths=2, zorder=5)
+
+    mplhep.cms.label(
+        "Simulation Preliminary",
+        data=True,
+        rlabel="",
+        fontsize=20,
+        loc=0  # 0 = upper left (same as legend convention)
+        )
+
     # Avoid duplicate legend entries
     handles, labels = ax.get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
-    ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=10)
+    ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=17)
 
     # Add color bar
-    cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
-    sm = ScalarMappable(norm=norm, cmap='viridis')
+
+    sm = ScalarMappable(norm=norm, cmap='Blues')
+    sm.set_array(df_baseline_proj['pt'])
+
+    #divider = make_axes_locatable(ax)
+    #cax = divider.append_axes("right", size="5%", pad=0.1)
+    #cbar = fig.colorbar(sm, cax=cax)
+
+    cbar = fig.colorbar(sm, ax=ax, pad=0.00)
+    cbar.set_label(r'Total $p_{T}$ [GeV]', fontsize=20)
+    cbar.ax.tick_params(labelsize=18)
+
+
+    '''cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
+    sm = ScalarMappable(norm=norm, cmap='Blues')
     sm.set_array(df_baseline_proj['pt'])
     cbar = fig.colorbar(sm, cax=cax)
-    cbar.set_label('Total pt')
+
+    cbar = fig.colorbar(sm, ax=ax, pad=0.00)
+    cbar.set_label(r'Total $p_{T}$ [GeV]', fontsize=20)'''
 
     # Set labels and title
     #ax.set_xlabel('Eta')
     #ax.set_ylabel('Phi')
-    ax.set_xlabel(r'$\eta$', fontsize=14)
-    ax.set_ylabel(r'$\phi$', fontsize=14)
-    ax.set_title(f'{algo}_{particle}_{event}')
+    ax.set_xlabel(r'$\eta$', fontsize=20)
+    ax.set_ylabel(r'$\phi$', fontsize=20)
+    ax.tick_params(axis='both', which='major', labelsize=18)
+    #ax.set_title(f'{algo}_{particle}_{event}')
 
     ax.autoscale()
     #plt.legend()
-    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_towers.png', dpi=500)  # Save the plot as an image
+    # Add CMS label
+    #mplhep.cms.label('Simulation Preliminary', data=True, rlabel='', fontsize=25)
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_towers.png', dpi=700)  # Save the plot as an image
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_towers.pdf', dpi=700)
     plt.show()
 
 
@@ -887,7 +928,8 @@ def plot_towers_xy_grid(df_baseline_proj, data_gen, algo, event, particle, subde
 
     # Normalize total pt values for color mapping
     max_pt = df_baseline_proj['pt'].max()
-    norm = Normalize(vmin=0, vmax=max_pt)
+    #norm = Normalize(vmin=0, vmax=max_pt)
+    norm = PowerNorm(gamma=0.5, vmin=0, vmax=max_pt)
 
     # Plotting bins with colors and annotations
     for _, row in df_baseline_proj.iterrows():
@@ -902,10 +944,10 @@ def plot_towers_xy_grid(df_baseline_proj, data_gen, algo, event, particle, subde
             y_vertices.append(y)
 
        #color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(pt)
-        if pt > 0:
-            color = ScalarMappable(norm=norm, cmap='viridis').to_rgba(pt)
-        else:
-            color = 'none'
+        #if pt > 0:
+        color = ScalarMappable(norm=norm, cmap='Blues').to_rgba(pt)
+        #else:
+            #color = 'none'
         poly = PolygonPlt(np.column_stack((x_vertices, y_vertices)), closed=True, edgecolor='black')#edgecolor='black'
         poly.set_facecolor(color)
         ax.add_patch(poly)
@@ -921,21 +963,43 @@ def plot_towers_xy_grid(df_baseline_proj, data_gen, algo, event, particle, subde
     #gen_x, gen_y = sph2cart(data_gen['gen_eta'], data_gen['gen_phi'])
     #ax.text(gen_x, gen_y, f'x', color='red', ha='center', va='center', fontsize=9, fontweight='bold')
 
+    mplhep.cms.label(
+        "Simulation Preliminary",
+        data=True,
+        rlabel="",
+        fontsize=20,
+        loc=0  # 0 = upper left (same as legend convention)
+        )
+
     # Add color bar
-    cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
-    sm = ScalarMappable(norm=norm, cmap='viridis')
+    '''cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
+    sm = ScalarMappable(norm=norm, cmap='Blues')
     sm.set_array(df_baseline_proj['pt'])
     cbar = fig.colorbar(sm, cax=cax)
-    cbar.set_label('Total pT [GeV]')
+    cbar.set_label(r'Total $p_{T}$ [GeV]', fontsize=20)'''
+
+
+    sm = ScalarMappable(norm=norm, cmap='Blues')
+    sm.set_array(df_baseline_proj['pt'])
+
+    #divider = make_axes_locatable(ax)
+    #cax = divider.append_axes("right", size="5%", pad=0.1)
+    #cbar = fig.colorbar(sm, cax=cax)
+
+    cbar = fig.colorbar(sm, ax=ax, pad=0.00)
+    cbar.set_label(r'Total $p_{T}$ [GeV]', fontsize=20)
+    cbar.ax.tick_params(labelsize=18)
 
     # Set labels and title
-    ax.set_xlabel('X position [cm]')
-    ax.set_ylabel('Y position [cm]')
-    ax.set_title(f'{algo}_{particle}_{event}')
+    ax.set_xlabel('X position [cm]', fontsize=20)
+    ax.set_ylabel('Y position [cm]', fontsize=20)
+    ax.tick_params(axis='both', which='major', labelsize=18)
+   #ax.set_title(f'{algo}_{particle}_{event}')
 
     ax.set_aspect('equal')
     ax.autoscale()
     plt.savefig(f'{algo}_{particle}_{event}_{subdet}_xy_towers.png', dpi=700)  # Save the plot as an image
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_xy_towers.pdf', dpi=700)
     plt.show()
 
 
@@ -1063,3 +1127,51 @@ def cart2sph(x, y, z=322.):
         eta = -np.log(np.tan(theta / 2))
         phi = np.arctan2(y, x)
         return eta, phi
+
+import matplotlib.pyplot as plt
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+def plot_hexagon_extents(extent_df, bins=50):
+    """
+    Plots histograms of eta and phi extents per hexagon with mean and std displayed.
+
+    Parameters:
+        extent_df : pd.DataFrame
+            DataFrame returned by your splitted_MS_Towers_by_event function.
+            Must contain 'eta_extent' and 'phi_extent' columns.
+        bins : int
+            Number of bins for the histogram.
+    """
+    plt.figure(figsize=(12,5))
+
+    # --- Eta extent histogram ---
+    plt.subplot(1,2,1)
+    eta_data = extent_df['eta_extent']
+    plt.hist(eta_data, bins=bins, color='skyblue', edgecolor='black')
+    mean_eta = np.mean(eta_data)
+    std_eta = np.std(eta_data)
+    plt.xlabel('Eta extent')
+    plt.ylabel('Number of hexagons')
+    plt.title('Histogram of Eta Extent per Hexagon')
+    plt.text(0.95, 0.95, f'Mean: {mean_eta:.3f}\nStd: {std_eta:.3f}',
+             transform=plt.gca().transAxes, ha='right', va='top', fontsize=10,
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+
+    # --- Phi extent histogram ---
+    plt.subplot(1,2,2)
+    phi_data = extent_df['phi_extent']
+    plt.hist(phi_data, bins=bins, color='salmon', edgecolor='black')
+    mean_phi = np.mean(phi_data)
+    std_phi = np.std(phi_data)
+    plt.xlabel('Phi extent')
+    plt.ylabel('Number of hexagons')
+    plt.title('Histogram of Phi Extent per Hexagon')
+    plt.text(0.95, 0.95, f'Mean: {mean_phi:.3f}\nStd: {std_phi:.3f}',
+             transform=plt.gca().transAxes, ha='right', va='top', fontsize=10,
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+
+    plt.tight_layout()
+    plt.show()
+    plt.savefig("Histograms_eta_phi_extent.pdf", dpi=300, bbox_inches='tight')

@@ -109,40 +109,6 @@ class Processing():
 
             df = df[baseline_selections]
 
-            # Ensure necessary columns are present in the dataframe
-            '''if 'gen_eta' in df.columns and 'gen_phi' in df.columns and 'gen_pt' in df.columns:
-                # Plot gen_eta distribution
-                plt.figure(figsize=(12, 4))
-
-                plt.subplot(1, 3, 1)
-                plt.hist(df['gen_eta'], bins=30, color='#4682B4', alpha=0.7)
-                plt.xlabel('gen_eta')
-                plt.ylabel('Count')
-                plt.title('Distribution of gen_eta')
-
-                # Plot gen_phi distribution
-                plt.subplot(1, 3, 2)
-                plt.hist(df['gen_phi'], bins=30, color='#4682B4', alpha=0.7)
-                plt.xlabel('gen_phi')
-                plt.ylabel('Count')
-                plt.title('Distribution of gen_phi')
-
-                # Plot gen_phi distribution
-                plt.subplot(1, 3, 3)
-                print("LEN PT", len(df['gen_pt']))
-                plt.hist(df['gen_pt'], bins=30, color='#4682B4', alpha=0.7)
-                plt.xlabel('gen_pt')
-                plt.ylabel('Count')
-                plt.title('Distribution of gen_pt')
-                #plt.yscale('log')
-
-                plt.tight_layout()
-                plt.show()
-            else:
-                print("Columns 'gen_eta' and 'gen_phi' are required for plotting.")
-
-            #print("ciao", df)'''
-
             # Get unique events
             unique_events = df['event'].unique()
             print("unique_events", unique_events)
@@ -984,7 +950,7 @@ class Processing():
             return results_df
         elif particle == "neutrinos":
             return self.resolution.perform_clustering_antikt(
-                df, f'{algo}_{particle}_{event}_{subdet}_results_2Ntuples.txt'
+                df, f'{algo}_{particle}_{event}_{subdet}_results_2Ntuples_TT_1GeV.txt'
             )
 
     def ModSumToTowers(self, kw, data, STCs_data, subdet, event, particle, algo, bin_geojson_filename, hex_geojson_filename, data_gen, geom, STCs, output_file):
@@ -999,14 +965,19 @@ class Processing():
             hexagon_info_df = self.eval_hex_bin_overlap_with_precomputed_jsons(data,filename_precomputed_silicon, filename_precomputed_scint ,geom)
             df_algo = self.apply_algorithm(hexagon_info_df, algo, subdet)
 
+            #plotMS.plot_hexagon_extents(df_extent)
+
             merged_df = pd.concat([df_STC, df_algo])
             final_df= merged_df.groupby(['event', 'eta_vertices', 'phi_vertices']).agg({'pt': 'sum'}).reset_index()
             df , df_sum = self.apply_update_to_each_event(final_df, bin_geojson_filename)
+
+            #print()
             #plotMS.plot_towers_xy_grid(df_sum, data_gen, algo, event, particle, subdet)
+            #print("df_sum", df_sum.columns)
+            #print("df_sum", df_sum)
+            results_df, jets = self.resolution.perform_clustering_antikt_matched(df_STC, data_gen, f'{algo}_{particle}_{event}_{subdet}_STCS_results.txt')
             #plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet, results_df)
             return self.evaluate_resolution(df, data_gen, algo, particle, event, subdet, output_file)
-
-            #results_df, jets = self.resolution.perform_clustering_antikt_matched(df_STC, data_gen, f'{algo}_{particle}_{event}_{subdet}_STCS_results.txt')
 
         else:
             hexagon_info_df= self.eval_hex_bin_overlap_with_precomputed_jsons(data,filename_precomputed_silicon, filename_precomputed_scint ,geom)

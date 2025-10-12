@@ -469,7 +469,7 @@ class Resolution():
             pseudojet_data = []
             for index, row in event_df.iterrows():
                 pt = row['pt']
-                if pt <= 0:
+                if pt <= 1:
                     continue  # Skip PseudoJet creation if pt is <= 1 (selecting TTs only above 1GeV)
 
                 # Compute eta_center and phi_center using the mean of vertices
