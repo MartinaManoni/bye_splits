@@ -180,8 +180,9 @@ class Processing():
                     # If events are specified, filter the DataFrame to only include those events
                     ts_df = ts_df[ts_df['event'].isin(selected_events)]
                 else:
-                    #df = df #[df['event']==493403]
-                    #print("EVENTS NEUTRINOS", df['event'])
+                    #print(ts_df['event'])
+                    #ts_df = ts_df[ts_df['event']==107041]
+                    #print("EVENTS NEUTRINOS", ts_df['event'])
                     unique_events_count = ts_df['event'].nunique()
                     print("Number of unique events:", unique_events_count)
 
@@ -240,8 +241,9 @@ class Processing():
                     # If events are specified, filter the DataFrame to only include those events
                     tc_df = tc_df[tc_df['event'].isin(selected_events)]
                 else:
-                    #df = df #[df['event']==493403]
-                    #print("EVENTS NEUTRINOS", df['event'])
+                    #print(tc_df['event'])
+                    #tc_df = tc_df[tc_df['event']==107041]
+                    #print("EVENTS NEUTRINOS", tc_df['event'])
                     unique_events_count = tc_df['event'].nunique()
                     print("Number of unique events:", unique_events_count)
 
@@ -938,7 +940,7 @@ class Processing():
     def evaluate_resolution(self, df, data_gen, algo, particle, event, subdet, output_file=None):
         if particle in ["pions", "jets"]:
             return self.resolution.perform_clustering_antikt_matched(
-                df, data_gen, f'{algo}_{particle}_{event}_{subdet}_{output_file}_results.txt', f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/output_Jets_txt_16towersPU200_02antikt_TT3/'
+                df, data_gen, f'{algo}_{particle}_{event}_{subdet}_{output_file}_results.txt', f'/home/llr/cms/manoni/CMSSW_12_5_2_patch1/src/Hgcal/bye_splits/bye_splits/plot/display_ModSum/output_16towersPU200_JETS_Delta_Match02_Deltakt_04_event/'
             )
         elif particle == "photons":
             results_df = self.resolution.eval_eta_phi_photon_resolution(
@@ -972,11 +974,14 @@ class Processing():
             df , df_sum = self.apply_update_to_each_event(final_df, bin_geojson_filename)
 
             #print()
+            #-------activate only for plotting ------
             #plotMS.plot_towers_xy_grid(df_sum, data_gen, algo, event, particle, subdet)
-            #print("df_sum", df_sum.columns)
-            #print("df_sum", df_sum)
-            results_df, jets = self.resolution.perform_clustering_antikt_matched(df_STC, data_gen, f'{algo}_{particle}_{event}_{subdet}_STCS_results.txt')
+            #results_df, jets = self.resolution.perform_clustering_antikt_matched(df, data_gen, f'{algo}_{particle}_{event}_{subdet}_STCS_results.txt')
+            #print("df NEUT", df)
+            #results_df, jets = self.resolution.perform_clustering_antikt(df, f'{algo}_{particle}_{event}_{subdet}_STCS_NEUTRINO.txt') #NEUTRINOS
+            #print("results_df", results_df)
             #plotMS.plot_towers_eta_phi_grid(df_sum, data_gen, algo, event, particle, subdet, results_df)
+            #-------activate only for plotting ------
             return self.evaluate_resolution(df, data_gen, algo, particle, event, subdet, output_file)
 
         else:

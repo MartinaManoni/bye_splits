@@ -290,7 +290,7 @@ class Resolution():
             for eta_diff, phi_diff in zip(eta_diffs, phi_diffs):
                 file.write(f"{eta_diff},{phi_diff}\n")
 
-    def perform_clustering_antikt_matched(self, df, genpart_df, output_txt, output_dir=None):
+    '''def perform_clustering_antikt_matched(self, df, genpart_df, output_txt, output_dir=None):
         """
         This function clusters particle data using the Anti-kt algorithm and matches reconstructed jets to generated particles.
 
@@ -347,7 +347,7 @@ class Resolution():
                 particle_info.append({'eta_vertices': row['eta_vertices'], 'phi_vertices': row['phi_vertices']})
 
             # Perform clustering using the Anti-kt algorithm
-            jet_definition = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+            jet_definition = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.2)
             cluster_sequence = fastjet.ClusterSequence(pseudojet_data, jet_definition)
             inclusive_jets = cluster_sequence.inclusive_jets()
 
@@ -362,7 +362,7 @@ class Resolution():
 
                 # Find the closest jet within a radius of 0.1 in eta/phi
                 matched_jet = None
-                min_distance = 0.1
+                min_distance = 0.2 #HERE MARTINA 
                 for jet in inclusive_jets:
                     jet_eta = jet.eta()
                     jet_phi = jet.phi()
@@ -373,6 +373,10 @@ class Resolution():
                     delta_eta = jet_eta - gen_eta
                     delta_phi = (jet_phi - gen_phi + np.pi) % (2 * np.pi) - np.pi
                     distance = np.sqrt(delta_eta**2 + delta_phi**2)
+                    #print("delta_eta", delta_eta)
+                    #print("delta_phi", delta_phi)
+                    #print("distance", distance)
+
 
                     if distance < min_distance:
                         matched_jet = jet
@@ -447,9 +451,201 @@ class Resolution():
         else:
             output_path = output_txt  # Save 
 
+        print("output_path", output_path)
         # Save the results to a txt file
         results_df.to_csv(output_path, sep=',', index=False)
+        return results_df, all_jets'''
+
+
+    def perform_clustering_antikt_matched(self, df, genpart_df, output_txt, output_dir=None):
+        """
+        This function clusters particle data using the Anti-kt algorithm and matches reconstructed jets to generated particles.
+
+        Key steps:
+        1. Construct pseudo-jets from particle data and perform clustering (radius 0.2).
+        2. Match reconstructed jets to generated particles within a DeltaR < 0.2.
+        3. If no match is found, record the *closest* jet anyway (for analysis).
+        4. Calculate jet resolutions (eta, phi, pT) for matched cases.
+        5. Save results to a txt file.
+
+        Returns:
+        - A DataFrame of all matched/unmatched jets.
+        - A list of reconstructed jets for each event.
+        """
+
+        all_results = []
+        all_jets = []
+
+        # Get unique events
+        unique_events = df['event'].unique()
+        print("unique_events:", unique_events)
+
+        # Ensure event is int in both dataframes
+        genpart_df['event'] = genpart_df['event'].astype(int)
+
+        # Loop over events
+        for event in unique_events:
+            event_df = df[df['event'] == event]
+            event_genpart_df = genpart_df[genpart_df['event'] == event]
+
+            # Prepare pseudo-jets
+            pseudojet_data = []
+            particle_info = []
+            for index, row in event_df.iterrows():
+                pt = row['pt']
+                if pt <= 0:
+                    continue
+
+                eta_center = np.mean(row['eta_vertices'])
+                phi_center = np.mean(row['phi_vertices'])
+
+                px = pt * np.cos(phi_center)
+                py = pt * np.sin(phi_center)
+                pz = pt * np.sinh(eta_center)
+                energy = (px**2 + py**2 + pz**2) ** 0.5
+
+                pseudojet = fastjet.PseudoJet(px, py, pz, energy)
+                pseudojet_data.append(pseudojet)
+                particle_info.append({'eta_vertices': row['eta_vertices'], 'phi_vertices': row['phi_vertices']})
+
+            
+            # -----------------------------
+            #  Compute ρ for this event
+            # -----------------------------
+
+            #print(f"Event {event}: n_particles = {len(pseudojet_data)}")
+            #print("First 5 particles (pt, eta, phi):", [(p.pt(), p.eta(), p.phi()) for p in pseudojet_data[:5]])
+
+            area_def = fastjet.AreaDefinition(
+                fastjet.active_area_explicit_ghosts,
+                fastjet.GhostedAreaSpec(5.0)          # change rapidity if needed
+            )
+
+            # -----------------------------
+            # Robust computation of rho for this event
+            # -----------------------------
+            rho_event = 0.0  # default fallback
+
+            # -----------------------------
+            # Cluster your physics jets (anti-kt R=0.4) WITH area
+            # -----------------------------
+            jet_definition = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+            cluster_sequence = fastjet.ClusterSequenceArea(
+                pseudojet_data,
+                jet_definition,
+                area_def
+            )
+
+            inclusive_jets = cluster_sequence.inclusive_jets()
+
+            #print("inclusive_jets", inclusive_jets)
+
+            all_jets.append(inclusive_jets)
+
+            
+            pt_over_area = []
+            for j in inclusive_jets:
+                jet_pt = j.pt()
+                jet_area = j.area()
+                
+                if jet_pt > 0.01 and jet_area > 0:
+                    #print(f"Jet pt = {jet_pt:.6f}, area = {jet_area:.6f}")
+                    pt_over_area.append(jet_pt / jet_area)
+            #print("pt_over_area", pt_over_area)
+
+            if len(pt_over_area) > 0:
+                rho_event = float(np.median(pt_over_area))
+            else:
+                rho_event = 0.0
+
+            #print(f"Event {event}: rho = {rho_event:.6g}")
+
+
+            # Match each gen particle to a jet
+            for _, gen_row in event_genpart_df.iterrows():
+                gen_eta = gen_row['gen_eta']
+                gen_phi = gen_row['gen_phi']
+                gen_pt = gen_row['gen_pt']
+
+                closest_jet = None
+                min_distance = float('inf')
+
+                # Find the closest jet
+                for jet in inclusive_jets:
+                    jet_eta = jet.eta()
+                    jet_phi = (jet.phi() + np.pi) % (2 * np.pi) - np.pi
+                    jet_pt = jet.pt()
+
+                    delta_eta = jet_eta - gen_eta
+                    delta_phi = (jet_phi - gen_phi + np.pi) % (2 * np.pi) - np.pi
+                    distance = np.sqrt(delta_eta**2 + delta_phi**2)
+
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_jet = jet
+
+                # Decide if it’s a true match or just the closest one
+                matched = min_distance < 0.2
+
+                if closest_jet is not None:
+                    jet_eta = closest_jet.eta()
+                    jet_phi = (closest_jet.phi() + np.pi) % (2 * np.pi) - np.pi
+                    jet_pt = closest_jet.pt()
+                    jet_E = closest_jet.E()
+                    jet_area = closest_jet.area()
+
+                    pt_ratio = jet_pt / gen_pt if gen_pt != 0 else None
+                    eta_resolution = jet_eta - gen_eta
+                    phi_resolution = ((jet_phi - gen_phi + np.pi) % (2 * np.pi)) - np.pi
+
+                    all_results.append({
+                        'event': event,
+                        'rho': rho_event,
+                        'jet_area': jet_area,
+                        'gen_eta': gen_eta,
+                        'gen_phi': gen_phi,
+                        'gen_pt': gen_pt,
+                        'reco_eta': jet_eta,
+                        'reco_phi': jet_phi,
+                        'reco_pt': jet_pt,
+                        'eta_diff': eta_resolution if matched else None,
+                        'phi_diff': phi_resolution if matched else None,
+                        'pt_ratio': pt_ratio if matched else None,
+                        'matched': matched
+                    })
+                else:
+                    # In rare case no jets at all in event
+                    all_results.append({
+                        'event': event,
+                        'rho': rho_event,
+                        'jet_area': None,
+                        'gen_eta': gen_eta,
+                        'gen_phi': gen_phi,
+                        'gen_pt': gen_pt,
+                        'reco_eta': None,
+                        'reco_phi': None,
+                        'reco_pt': None,
+                        'eta_diff': None,
+                        'phi_diff': None,
+                        'pt_ratio': None,
+                        'matched': False
+                    })
+
+        # Convert to DataFrame
+        results_df = pd.DataFrame(all_results)
+
+        # Save output
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, output_txt)
+        else:
+            output_path = output_txt
+
+        #print("output_path:", output_path)
+        results_df.to_csv(output_path, sep=',', index=False)
+
         return results_df, all_jets
+
 
     def perform_clustering_antikt(self, df, output_txt):
         print("Performing antikt clustering for Minimum Bias sample")
@@ -469,7 +665,7 @@ class Resolution():
             pseudojet_data = []
             for index, row in event_df.iterrows():
                 pt = row['pt']
-                if pt <= 1:
+                if pt <= 0:
                     continue  # Skip PseudoJet creation if pt is <= 1 (selecting TTs only above 1GeV)
 
                 # Compute eta_center and phi_center using the mean of vertices

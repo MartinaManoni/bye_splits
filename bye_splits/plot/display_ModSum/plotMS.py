@@ -367,7 +367,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     print("plotting eta_phi_towers")
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    #print ("DATA GEN", data_gen)
+    print ("DATA GEN", data_gen)
     #print ("DATA ", df_baseline_proj)
     # Plotting the grid of bins
     initial_kw = {
@@ -394,6 +394,9 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     max_pt = df_baseline_proj['pt'].max()
     norm = PowerNorm(gamma=0.5, vmin=0, vmax=max_pt)
     #norm = Normalize(vmin=0, vmax=max_pt)
+    
+    # Apply pt cut: keep only towers with pt >= 3 GeV
+    #df_baseline_proj = df_baseline_proj[df_baseline_proj['pt'] > 3]
 
     # Plotting bins with colors and annotations
     for _, row in df_baseline_proj.iterrows():
@@ -435,9 +438,14 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
             #ax.legend(fontsize=20)
 
             # Create a circle for each jet
+            circle = Circle((jet_eta, jet_phi), 0.2 , color='blue', fill=False, linewidth=2, label=r'Anti-kt $\Delta R = 0.2$')
+            ax.add_patch(circle)
+
+            # Create a circle for each jet
             circle = Circle((jet_eta, jet_phi), 0.4 , color='red', fill=False, linewidth=2, label=r'Anti-kt $\Delta R = 0.4$')
             ax.add_patch(circle)
             
+
             # Create a circle for each jet
             #circle2 = Circle((jet_eta, jet_phi), 0.8 , color='blue', fill=False, linewidth=2, label=r'Anti-kt $\Delta R = 0.8$' )
             #ax.add_patch(circle2)
@@ -466,6 +474,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
                 ax.scatter(row['gen_eta'], row['gen_phi'],
                         marker='x', color='red', s=100, linewidths=2, zorder=5)
         else:
+            print("HOLA")
             ax.scatter(data_gen['gen_eta'].values[0], data_gen['gen_phi'].values[0],
                     marker='x', color='red', s=100, linewidths=2, zorder=5)
 
@@ -480,7 +489,7 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     # Avoid duplicate legend entries
     handles, labels = ax.get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
-    ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=17)
+    ax.legend(by_label.values(), by_label.keys(), loc='upper left', fontsize=17)
 
     # Add color bar
 
@@ -516,8 +525,8 @@ def plot_towers_eta_phi_grid(df_baseline_proj, data_gen, algo, event, particle, 
     #plt.legend()
     # Add CMS label
     #mplhep.cms.label('Simulation Preliminary', data=True, rlabel='', fontsize=25)
-    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_towers.png', dpi=700)  # Save the plot as an image
-    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_towers.pdf', dpi=700)
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_towers_3GeV.png', dpi=700)  # Save the plot as an image
+    plt.savefig(f'{algo}_{particle}_{event}_{subdet}_eta_phi_towers_3GeV.pdf', dpi=700)
     plt.show()
 
 

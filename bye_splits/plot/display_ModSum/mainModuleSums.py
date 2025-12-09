@@ -89,6 +89,7 @@ def main(subdet, event, particle, algo, n, geom, inputfile, STCs, PU200, root_fi
                 print(f"Using provided ROOT file: {root_file}")
             elif STCs and PU200:
                 print("Enabling STCs for Jets samples PU200...")
+                #root_file = '/data_CMS/cms/manoniL1HGCAL/ntupleV16Production/VBFHToInvisible_Spring23_PU200/skimmed_ntuples/Ntuple_17.root'
                 root_file = '/data_CMS/cms/manoni/L1HGCAL/final_skimmed_V16ntuples_STCS/VBFHToInvisible_Spring23_PU200_100ntuples.root'
             else:
                 print("Enabling STCs for Jets samples PU0...")
@@ -117,10 +118,11 @@ def main(subdet, event, particle, algo, n, geom, inputfile, STCs, PU200, root_fi
         if events is None or len(events) == 0:
             selected_events = None
         else:
-            selected_events = events
+            selected_events = events #107041
 
 
         #print("selected_events", len(selected_events))
+        #print("selected_events", selected_events)
 
         if STCs:
             if subdet == 1:
